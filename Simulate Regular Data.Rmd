@@ -26,7 +26,7 @@ library(tidyverse)
 
 # Simulate Base Case
 
-To simulate the data, I will choose around 20 locations, and simulate the total population at each
+To simulate the data, I will choose around 50 locations, and simulate the total population at each
 location. Let $N_i$ represent the population at each location $i$.
 
 I'm not sure whether I want the population to follow a poisson or negative binomial distribution - I
@@ -130,6 +130,7 @@ following:
 
 -   $p_{1d}$ = probability of detecting an average cue
 -   s = number of cues
+-   $p_{d|s}$ = detection probability given auditory cues
 
 $p_{1d}$ is supposed to represent the four factors: amplitude of the birds, attentiveness of the
 observer, auditory acuity of the observer, and masking of bird sounds by other sounds. **Would it be
@@ -295,7 +296,53 @@ dfBaseProb$`Duration of Count` = paste("Duration of",dfBaseProb$`Duration of Cou
 head(dfBaseProb)
 ```
 
-### Visualizing Data
+
+## Negative Binomial
+
+Another case where I model population data as following a negative binomial 
+distribution. Similar numbers to the poisson case!
+```{r}
+set.seed(1)
+n_locations = 50
+size = 10 # chosen so it has the same mean as the poisson 
+prob = 0.4 # get this number from some data?
+locationID = 1:n_locations
+N_i = rnbinom(n_locations,size,prob)
+dfNB = as.data.frame(cbind(locationID, N_i))
+head(dfNB)
+```
+```{r}
+# ask: ideally p_1d and p_s should vary across the different locationID's 
+# based on if they are easy, medium, or hard areas to survey
+# for now my assumptions are that all locations are a medium difficulty area 
+# to survey
+p_1d = 0.2
+p_s = 0.6
+maxMinute = 5 # picked a small duration for visualization purposes
+m = 0:maxMinute
+cuesPerMin = 3 
+s = rep(m*cuesPerMin, nrow(dfNB))
+```
+
+```{r}
+# produce the detection probabilities after duration m 
+dfNBProb = dfNB%>%
+  slice(rep(1:n(), each = length(m)))%>%
+  mutate(`Duration of Count`=rep(m, nrow(dfNB)),
+         Cues = s,
+         p = PredictProbability(Cues,p_1d)*p_s)
+
+```
+
+
+```{r}
+set.seed(1)
+dfNBProb$C = rbinom(nrow(dfNBProb), dfNBProb$N_i, dfNBProb$p)
+dfNBProb$`Duration of Count` = paste("Duration of",dfNBProb$`Duration of Count`,"mins")
+head(dfNBProb)
+```
+
+## Visualizing Data
 
 As duration increases, overall detection probability increases. As overall
 detection probability increases, we see the average point count value in the 
@@ -308,9 +355,25 @@ ggplot()+
   geom_histogram(aes(x=C))+ 
   facet_wrap(~as.factor(`Duration of Count`))+ 
   theme_minimal()+ 
-  labs(title = "Distribution of Point Counts as Duration of Counts Varies", 
-       subtitle = "Distribution formed using location id values",
+  labs(title = "Distribution of Point Counts as Duration of Survey Varies", 
+       subtitle = "Distribution formed using location id values. 
+Population totals simulated with poisson distribution.",
        x = "Point Counts",
        y="")
 ```
 
+Look at the NB case.
+```{r}
+# look at distributions based on duration 
+dfNBProb%>%
+  filter(`Duration of Count`!="Duration of 0 mins")%>%
+ggplot()+ 
+  geom_histogram(aes(x=C))+ 
+  facet_wrap(~as.factor(`Duration of Count`))+ 
+  theme_minimal()+ 
+  labs(title = "Distribution of Point Counts as Duration of Survey Varies", 
+       subtitle = "Distribution formed using location id values. 
+Population totals simulated with NB distribution",
+       x = "Point Counts",
+       y="")
+```

@@ -1654,7 +1654,7 @@ pre code {
 </div>
 <div id="simulate-base-case" class="section level1">
 <h1>Simulate Base Case</h1>
-<p>To simulate the data, I will choose around 20 locations, and simulate
+<p>To simulate the data, I will choose around 50 locations, and simulate
 the total population at each location. Let <span class="math inline">\(N_i\)</span> represent the population at each
 location <span class="math inline">\(i\)</span>.</p>
 <p>I’m not sure whether I want the population to follow a poisson or
@@ -1762,6 +1762,8 @@ covariate. I would need the following:</p>
 <li><span class="math inline">\(p_{1d}\)</span> = probability of
 detecting an average cue</li>
 <li>s = number of cues</li>
+<li><span class="math inline">\(p_{d|s}\)</span> = detection probability
+given auditory cues</li>
 </ul>
 <p><span class="math inline">\(p_{1d}\)</span> is supposed to represent
 the four factors: amplitude of the birds, attentiveness of the observer,
@@ -1932,6 +1934,8 @@ head(dfBaseProb)</code></pre>
 </div>
 <div id="negative-binomial" class="section level2">
 <h2>Negative Binomial</h2>
+<p>Another case where I model population data as following a negative
+binomial distribution. Similar numbers to the poisson case!</p>
 <pre class="r"><code>set.seed(1)
 n_locations = 50
 size = 10 # chosen so it has the same mean as the poisson 
