@@ -1,0 +1,314 @@
+---
+title: "Simulate Regular Data"
+author: "Tito"
+date: "2022-10-16"
+output: pdf_document
+editor_options: 
+  markdown: 
+    wrap: 100
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load Packages
+
+```{r}
+library(tidyverse)
+```
+
+# Q
+
+-   Species to focus on?
+
+# Simulate Base Case
+
+To simulate the data, I will choose around 20 locations, and simulate the total population at each
+location. Let $N_i$ represent the population at each location $i$.
+
+I'm not sure whether I want the population to follow a poisson or negative binomial distribution - I
+can try both!
+
+## Poisson
+
+```{r}
+set.seed(1)
+n_locations = 50
+lambda = 15 # get this number from some data?
+locationID = 1:n_locations
+N_i = rpois(n_locations,lambda)
+
+dfBase = as.data.frame(cbind(locationID, N_i))
+head(dfBase)
+```
+
+I can think of the counts at each location ($C_i$) as a binomial random variable. However to do
+this, I need not only the size ($N_i$) but I need the probability.
+
+Modelling this probability is a little tricky so I want to do some further analysis first.
+
+### Detection Probability with Time as a Covariate
+
+From the paper *A Conceptual Guide to Detection Probability for Point Counts and Other Count-based
+Survey Methods* I know that I can model detection probability with time as a covariate. We expect
+detection probability to change as the duration of the count increases. To model this we need the
+following:
+
+-   m = duration of the count
+-   $p_{1m}$ = detection probability for a 1 min count
+    -   **Note**: The smallest time interval I will have in my simulation is 1 mins
+
+Create a function to model detection probability by time m
+
+```{r}
+PredictProbability = function(m, p1m){
+  # the way I think about this function is (for the time example): 
+  # p1m is the probability of detecting an individual within a 1 min interval 
+  # 1-p1m is the probability of not detecting an individual within a 1 min interval
+  # (1-p1m)^m is the probability of not detecting an individual at all within m minutes
+  # 1-((1-p1m)^m) is the probability of detecting an individual at least once within 
+  # m minutes
+  p_m = 1-((1-p1m)**m)
+  return(p_m)
+}
+```
+
+Set my constants and plot. The graph below makes sense to me as higher detection probabilities in 1
+min intervals means that probability of counting all individuals in the area increases.
+
+```{r}
+# let m vary from 1 min to 90 mins
+maxMinute = 90
+m = 1:maxMinute
+# let p_1m vary from a low detection probability to a higher one with 1 min intervals
+p_1m = c(0.05,0.1,0.2)
+p_1m_col = rep(p_1m, maxMinute)
+
+# make the dataframe of probabilities
+dfProbabilityTime = tibble(m=m)
+dfProbabilityTime = dfProbabilityTime %>%
+  slice(rep(1:n(), each = length(p_1m)))
+dfProbabilityTime = dfProbabilityTime%>%
+  mutate(p_1m = p_1m_col, 
+         p_m = PredictProbability(m,p_1m))
+
+# show results
+head(dfProbabilityTime)
+ggplot(dfProbabilityTime)+ 
+  geom_line(aes(x=m, y = p_m, color = as.factor(p_1m)))+ 
+  theme_minimal()+ 
+  labs(title = "Detection Probability at Duration m", 
+       x = "M minutes", 
+       y = "Detection Probability by Time m", 
+       color = "Detection Probability for 1 Minute Count")
+  
+```
+
+If I know that $p_m$ is then I can find C. Because $p_m = \frac{C}{N}$. So rearranging gives me
+$C = Np_m$ and I know N (from Poisson distribution).
+
+```{r}
+N1=14
+dfProbabilityTime = dfProbabilityTime%>%
+  mutate(C = N1*p_m)
+ggplot(dfProbabilityTime)+ 
+  geom_line(aes(x=m, y = C, color = as.factor(p_1m)))+ 
+  theme_minimal()+ 
+  labs(title = "Cumulative Count at Duration m", 
+       x = "M minutes", 
+       y = "Cumulative Count by Time m", 
+       color = "Detection Probability for 1 Minute Count")
+```
+
+### Detection Probability with Cue's as a Covariate
+
+I can also model detection probability with number of cues as a covariate. I would need the
+following:
+
+-   $p_{1d}$ = probability of detecting an average cue
+-   s = number of cues
+
+$p_{1d}$ is supposed to represent the four factors: amplitude of the birds, attentiveness of the
+observer, auditory acuity of the observer, and masking of bird sounds by other sounds. **Would it be
+fair to assume that** $p_{1d}$ increases as m increases? I'm trying to see if there's a way to link
+time + presence of cues to figure out what the detection probability should be. Might not make sense
+though
+
+For now I'll just say that s = Bm where m is the number of minutes, and B is the rate at which s
+increases as m increases.
+
+$p_{d|s} = (1-(1-p_{1d})^s)$
+
+One thing to note is that there is a tradeoff between s and $p_{1d}$. If s is high then yes we have
+a chorus of individuals singing, but then it becomes harder to identify a single individual amongst
+the noise. So higher s means lower $p_{1d}$.
+
+Also I would argue that $p_{1d}$ is what should vary across site location (not across time). I can
+maybe make $p_s$ vary across time since it is the probability of making a cue.
+
+```{r}
+# let s vary based on time (and a known cues/min rate)
+maxMinute = 15
+m = 0:maxMinute
+cuesPerMin = 3 
+s = m*cuesPerMin # should this be a more complicated relationship?
+# let p_1d vary from a low detection  to a higher one
+p_1d = c(0.1,0.2,0.3)
+p_1d_col = rep(p_1d, length(s))
+
+# make df
+dfProbabilityCue = tibble(s=s)
+dfProbabilityCue = dfProbabilityCue %>%
+  slice(rep(1:n(), each = length(p_1d)))
+
+dfProbabilityCue = dfProbabilityCue%>%
+  mutate(p_1d = p_1d_col, 
+         p_ds = PredictProbability(s,p_1d))
+
+# show results
+head(dfProbabilityCue)
+ggplot(dfProbabilityCue)+ 
+  geom_line(aes(x=s, y = p_ds, color = as.factor(p_1d)))+ 
+  theme_minimal()+ 
+  labs(title = "Detection Probability After s Cues", 
+       x = "Cumulative Number of Cues (s)", 
+       y = "Detection Probability Given Availability", 
+       color = "Probability of Detecting an Average Cue")
+```
+
+To find overall detection probability, I need to incorporate $p_s$ which is the 
+probability that the bird makes a cue. Maybe this is where I can incorporate 
+using the time equation we saw earlier. So assume I have a base $p_s$ = probability 
+of making a cue in one minute.
+
+In this case, we can calculate the probability of making at least one cue after 
+m minutes. 
+
+Overall detection probability is significantly impacted by the probability of making
+a cue. I don't think there is a need to increase $p_s$ by time because the linear
+relationship between s and m means that as m increases, s already increases. 
+```{r}
+# case 1: p_1d is constant, and p_s varies from high to low 
+
+maxMinute = 15
+m = 0:maxMinute
+cuesPerMin = 3 
+s = m*cuesPerMin # should this be a more complicated relationship?
+p_1d = c(0.1)
+p_s = c(0.1,0.3,0.5,0.8)
+p_1d_col = rep(p_1d, length(s))
+p_s_col = rep(p_s, length(s))
+
+# make df
+dfProbabilityCue = tibble(s=s)
+dfProbabilityCue$p_1d = p_1d
+dfProbabilityCue = dfProbabilityCue %>%
+  slice(rep(1:n(), each = length(p_s)))
+
+dfProbabilityCue = dfProbabilityCue%>%
+  mutate(p_s = p_s_col, 
+         p = PredictProbability(s,p_1d)*p_s)
+
+# show results
+head(dfProbabilityCue)
+ggplot(dfProbabilityCue)+ 
+  geom_line(aes(x=s, y = p, color = as.factor(p_s)))+ 
+  theme_minimal()+ 
+  labs(title = "Overall Detection Probability After s Cues", 
+       x = "Cumulative Number of Cues (s)", 
+       y = "Detection Probability", 
+       color = "Probability of Making a Cue")
+```
+
+
+Graph below shows why I'm probably wrong about using time to model $p_s$. 
+It doesn't make sense that I have these patterned dips. Live & learn.
+```{r}
+# let s vary based on time (and a known cues/min rate)
+maxMinute = 15
+m = 0:maxMinute
+cuesPerMin = 3 
+s = m*cuesPerMin # should this be a more complicated relationship?
+# let p_1d vary from a low detection  to a higher one
+p_1d = c(0.1,0.2,0.3)
+p_s = c(0.2)
+p_1d_col = rep(p_1d, length(s))
+#p_s_col = rep(p_s, length(s))
+
+# make df
+dfProbabilityCue = tibble(s=s)
+dfProbabilityCue = dfProbabilityCue %>%
+  slice(rep(1:n(), each = length(p_1d)))
+
+dfProbabilityCue = dfProbabilityCue%>%
+  mutate(p_1d = p_1d_col,
+         p = PredictProbability(s,p_1d)*PredictProbability(m,p_s))
+
+# show results
+head(dfProbabilityCue)
+ggplot(dfProbabilityCue)+ 
+  geom_line(aes(x=s, y = p, color = as.factor(p_1d)))+ 
+  theme_minimal()+ 
+  labs(title = "Detection Probability After s Cues", 
+       x = "Cumulative Number of Cues (s)", 
+       y = "Detection Probability", 
+       color = "Probability of Detecting an Average Cue")
+```
+
+### Probability Conclusion
+
+As such, I conclude that we can model detection probability as a function of cues 
+(s) and availability. 
+
+
+```{r}
+# ask: ideally p_1d and p_s should vary across the different locationID's 
+# based on if they are easy, medium, or hard areas to survey
+# for now my assumptions are that all locations are a medium difficulty area 
+# to survey
+p_1d = 0.2
+p_s = 0.6
+maxMinute = 5 # picked a small duration for visualization purposes
+m = 0:maxMinute
+cuesPerMin = 3 
+s = rep(m*cuesPerMin, nrow(dfBase))
+```
+
+```{r}
+# produce the detection probabilities after duration m 
+dfBaseProb = dfBase%>%
+  slice(rep(1:n(), each = length(m)))%>%
+  mutate(`Duration of Count`=rep(m, nrow(dfBase)),
+         Cues = s,
+         p = PredictProbability(Cues,p_1d)*p_s)
+
+```
+
+
+```{r}
+set.seed(1)
+dfBaseProb$C = rbinom(nrow(dfBaseProb), dfBaseProb$N_i, dfBaseProb$p)
+dfBaseProb$`Duration of Count` = paste("Duration of",dfBaseProb$`Duration of Count`,"mins")
+head(dfBaseProb)
+```
+
+### Visualizing Data
+
+As duration increases, overall detection probability increases. As overall
+detection probability increases, we see the average point count value in the 
+distribution become higher, which is what we should expect. 
+```{r}
+# look at distributions based on duration 
+dfBaseProb%>%
+  filter(`Duration of Count`!="Duration of 0 mins")%>%
+ggplot()+ 
+  geom_histogram(aes(x=C))+ 
+  facet_wrap(~as.factor(`Duration of Count`))+ 
+  theme_minimal()+ 
+  labs(title = "Distribution of Point Counts as Duration of Counts Varies", 
+       subtitle = "Distribution formed using aggregated location id values",
+       x = "Point Counts",
+       y="")
+```
+
