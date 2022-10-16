@@ -2,9 +2,11 @@
 title: "Simulate Regular Data"
 author: "Tito"
 date: "2022-10-16"
-output: pdf_document
-editor_options: 
-  markdown: 
+output:
+  html_document:
+    df_print: paged
+editor_options:
+  markdown:
     wrap: 100
 ---
 
@@ -307,7 +309,7 @@ ggplot()+
   facet_wrap(~as.factor(`Duration of Count`))+ 
   theme_minimal()+ 
   labs(title = "Distribution of Point Counts as Duration of Counts Varies", 
-       subtitle = "Distribution formed using aggregated location id values",
+       subtitle = "Distribution formed using location id values",
        x = "Point Counts",
        y="")
 ```
