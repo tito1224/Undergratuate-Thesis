@@ -2049,12 +2049,13 @@ interval.</p>
 location, and also the width of each time interval.</p>
 <p>Once I have that, I need a way to figure out how many point counts
 should be at each interval. Once again I’ll use binomial, but this time
-I’ll add a limit such that the last number generated needs to equal to
-the total point counts at location <span class="math inline">\(i\)</span>. I will make a function to generate
-these counts.</p>
+I’ll add a limit such that the last number generated will ensure that
+the sum of all the numbers generated so far are equal to the total point
+counts at location <span class="math inline">\(i\)</span>. I will make a
+function to generate these counts.</p>
 <p>The generate interval counts function will work if we only use the
-probability of detection calculated at the end of the interval to find
-the interval count.</p>
+probability of detection calculated at the end of the full duration of
+the count.</p>
 <pre class="r"><code>generateIntervalCounts = function(duration, intervalWidth,prob,locationCount){
   
   # use rbinom to generate random numbers, and each time a number is generated, 

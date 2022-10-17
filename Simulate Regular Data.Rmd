@@ -352,7 +352,7 @@ detection probability increases, we see the average point count value in the
 distribution become higher, which is what we should expect. 
 ```{r}
 # look at distributions based on duration 
-dfBaseProb%>%
+dfPoissonProb%>%
   #filter(`Duration of Count`!="Duration of 0 mins")%>%
 ggplot()+ 
   geom_histogram(aes(x=C),bins=15)+ 
@@ -391,12 +391,13 @@ also the width of each time interval.
 
 Once I have that, I need a way to figure out how many point counts should be 
 at each interval. Once again I'll use binomial, but this time I'll add a limit 
-such that the last number generated needs to equal to the total point counts at 
+such that the last number generated will ensure that the sum of all the numbers 
+generated so far are equal to the total point counts at 
 location $i$. I will make a function to generate these counts.
 
 
 The generate interval counts function will work if we only use the probability of 
-detection calculated at the end of the interval to find the interval count. 
+detection calculated at the end of the full duration of the count. 
 ```{r}
 generateIntervalCounts = function(duration, intervalWidth,prob,locationCount){
   
@@ -649,5 +650,6 @@ ggplot(dfPoissonFinalLong)+
        x = "Point Counts", 
        y = "")
 ```
+
 
 
