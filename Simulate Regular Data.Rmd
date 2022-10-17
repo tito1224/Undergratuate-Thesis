@@ -5,6 +5,7 @@ date: "2022-10-16"
 output:
   html_document:
     df_print: paged
+    toc: true
 editor_options:
   markdown:
     wrap: 100
@@ -41,8 +42,8 @@ lambda = 15 # get this number from some data?
 locationID = 1:n_locations
 N_i = rpois(n_locations,lambda)
 
-dfBase = as.data.frame(cbind(locationID, N_i))
-head(dfBase)
+dfPoisson = as.data.frame(cbind(locationID, N_i))
+head(dfPoisson)
 ```
 
 I can think of the counts at each location ($C_i$) as a binomial random variable. However to do
@@ -272,17 +273,17 @@ As such, I conclude that we can model detection probability as a function of cue
 # to survey
 p_1d = 0.2
 p_s = 0.6
-maxMinute = 5 # picked a small duration for visualization purposes
-m = 0:maxMinute
+maxMinute = 5 # picked a 5 min duration for visualization purposes
+m = maxMinute #1:maxMinute
 cuesPerMin = 3 
-s = rep(m*cuesPerMin, nrow(dfBase))
+s = rep(m*cuesPerMin, nrow(dfPoisson))
 ```
 
 ```{r}
 # produce the detection probabilities after duration m 
-dfBaseProb = dfBase%>%
+dfPoissonProb = dfPoisson%>%
   slice(rep(1:n(), each = length(m)))%>%
-  mutate(`Duration of Count`=rep(m, nrow(dfBase)),
+  mutate(`Duration of Count`=rep(m, nrow(dfPoisson)),
          Cues = s,
          p = PredictProbability(Cues,p_1d)*p_s)
 
@@ -291,9 +292,10 @@ dfBaseProb = dfBase%>%
 
 ```{r}
 set.seed(1)
-dfBaseProb$C = rbinom(nrow(dfBaseProb), dfBaseProb$N_i, dfBaseProb$p)
-dfBaseProb$`Duration of Count` = paste("Duration of",dfBaseProb$`Duration of Count`,"mins")
-head(dfBaseProb)
+dfPoissonProb$C = rbinom(nrow(dfPoissonProb), dfPoissonProb$N_i, dfPoissonProb$p)
+dfPoissonProb$m = dfPoissonProb$`Duration of Count`
+dfPoissonProb$`Duration of Count` = paste("Duration of",dfPoissonProb$`Duration of Count`,"mins")
+head(dfPoissonProb)
 ```
 
 
@@ -319,7 +321,7 @@ head(dfNB)
 p_1d = 0.2
 p_s = 0.6
 maxMinute = 5 # picked a small duration for visualization purposes
-m = 0:maxMinute
+m = maxMinute #0:maxMinute
 cuesPerMin = 3 
 s = rep(m*cuesPerMin, nrow(dfNB))
 ```
@@ -338,6 +340,7 @@ dfNBProb = dfNB%>%
 ```{r}
 set.seed(1)
 dfNBProb$C = rbinom(nrow(dfNBProb), dfNBProb$N_i, dfNBProb$p)
+dfNBProb$m = dfNBProb$`Duration of Count`
 dfNBProb$`Duration of Count` = paste("Duration of",dfNBProb$`Duration of Count`,"mins")
 head(dfNBProb)
 ```
@@ -350,10 +353,10 @@ distribution become higher, which is what we should expect.
 ```{r}
 # look at distributions based on duration 
 dfBaseProb%>%
-  filter(`Duration of Count`!="Duration of 0 mins")%>%
+  #filter(`Duration of Count`!="Duration of 0 mins")%>%
 ggplot()+ 
-  geom_histogram(aes(x=C))+ 
-  facet_wrap(~as.factor(`Duration of Count`))+ 
+  geom_histogram(aes(x=C),bins=15)+ 
+  #facet_wrap(~as.factor(`Duration of Count`))+ 
   theme_minimal()+ 
   labs(title = "Distribution of Point Counts as Duration of Survey Varies", 
        subtitle = "Distribution formed using location id values. 
@@ -366,10 +369,10 @@ Look at the NB case.
 ```{r}
 # look at distributions based on duration 
 dfNBProb%>%
-  filter(`Duration of Count`!="Duration of 0 mins")%>%
+  #filter(`Duration of Count`!="Duration of 0 mins")%>%
 ggplot()+ 
-  geom_histogram(aes(x=C))+ 
-  facet_wrap(~as.factor(`Duration of Count`))+ 
+  geom_histogram(aes(x=C),bins=15)+ 
+  #facet_wrap(~as.factor(`Duration of Count`))+ 
   theme_minimal()+ 
   labs(title = "Distribution of Point Counts as Duration of Survey Varies", 
        subtitle = "Distribution formed using location id values. 
@@ -377,3 +380,274 @@ Population totals simulated with NB distribution",
        x = "Point Counts",
        y="")
 ```
+
+## Intervals
+
+I know what the total point counts at each location are. The trick is now to 
+figure out how I want to simulate the counts during each interval. 
+
+I am going to need to set the total duration of the count at each location, and 
+also the width of each time interval. 
+
+Once I have that, I need a way to figure out how many point counts should be 
+at each interval. Once again I'll use binomial, but this time I'll add a limit 
+such that the last number generated needs to equal to the total point counts at 
+location $i$. I will make a function to generate these counts.
+
+
+The generate interval counts function will work if we only use the probability of 
+detection calculated at the end of the interval to find the interval count. 
+```{r}
+generateIntervalCounts = function(duration, intervalWidth,prob,locationCount){
+  
+  # use rbinom to generate random numbers, and each time a number is generated, 
+  # check to make sure that it has not surpassed the sum of the location
+  
+  # counter for summed values
+  total = 0
+  # counter for number of iterations
+  k = 0
+  
+  # generate the number of intervals
+  nGeneratedNumbers = duration/intervalWidth
+  
+  # vector to store point counts
+  intervalCounts = c()
+
+  while(total<locationCount){
+    
+    rvBinom  = rbinom(1,locationCount,prob)
+    total = total + rvBinom
+    k = k+1
+    
+    # set up trace
+    trace = tibble(k = k, 
+                 rvBinom = rvBinom, 
+                 total = total, 
+                 intervalCounts = intervalCounts)
+  
+    
+    # check if total is less than location count
+    if(total < locationCount & k < (nGeneratedNumbers-1)){
+      # case 1
+      intervalCounts[k] = rvBinom
+    } else if(total < locationCount & k == (nGeneratedNumbers-1)){
+      # case 2
+      # if by the second last iteration, we still have not reached locationCount
+      # value, set final number equal what is needed
+      intervalCounts[k] = rvBinom
+      finalValue = locationCount-total
+      # update counter and sum
+      k=k+1
+      total = total + finalValue
+      intervalCounts[k] = finalValue
+      
+      
+    } else if(total >= locationCount & k <= (nGeneratedNumbers-1)){
+      # case 3
+      finalValue = locationCount-(total-rvBinom) # figure out last value 
+      intervalCounts[k] = finalValue
+      while(k<nGeneratedNumbers){
+        # fill in remaining intervals with 0
+        fillValue = 0
+        k=k+1
+        intervalCounts[k] = fillValue
+      }
+    } else if(duration==1){
+      if(rvBinom!=locationCount){
+        intervalCounts = locationCount
+      } else{
+        intervalCounts = rvBinom
+      }
+    }
+  }
+  #return(list(interval = intervalCounts,trace = trace)) 
+  return(intervalCounts)
+  
+  
+}
+```
+
+
+```{r}
+# test - it works!
+
+## test case 2
+#set.seed(8)
+#generateIntervalCounts(5,1,0.1,3)
+
+## test case 3
+#set.seed(8)
+#generateIntervalCounts(5,1,0.1,3)
+
+```
+### Poisson 
+```{r}
+maxMinute = 5
+intervalWidth = 1
+if(maxMinute%%intervalWidth!=0){
+  print("Error! Duration of count must be divisible by interval width.")
+}
+```
+
+```{r}
+p_1d = 0.2
+p_s = 0.6
+m = c(1:maxMinute)*intervalWidth
+cuesPerMin = 3 
+s = rep(m*cuesPerMin, nrow(dfPoisson))
+```
+
+```{r}
+# produce the detection probabilities after duration m 
+dfPoissonProb = dfPoisson%>%
+  slice(rep(1:n(), each = length(m)))%>%
+  mutate(`Duration of Count`=rep(m, nrow(dfPoisson)),
+         Cues = s,
+         p = PredictProbability(Cues,p_1d)*p_s)
+
+```
+
+In a scenario like this, I would use the last vector that appears. I don't think 
+the numbers make sense though because detection probability changes as time changes. 
+So the detection probability being used should differ at each time interval.
+```{r}
+set.seed(1)
+mapply(generateIntervalCounts, dfPoissonProb$`Duration of Count`[1:5], intervalWidth,
+                       dfPoissonProb$p[1:5], dfPoissonProb$N_i[1:5])
+```
+
+In the second iteration of the function, I will allow the prob argument to be a 
+vector! Same logic of original function still applies however.
+```{r}
+generateIntervalCountsProb = function(duration, intervalWidth,prob,locationCount){
+  
+  # use rbinom to generate random numbers, and each time a number is generated, 
+  # check to make sure that it has not surpassed the sum of the location
+  
+  # counter for summed values
+  total = 0
+  # counter for number of iterations
+  k = 0
+  
+  # generate the number of intervals
+  nGeneratedNumbers = duration/intervalWidth
+  
+  # vector to store point counts
+  intervalCounts = c()
+
+  while(total<locationCount){
+    
+    k=k+1
+    pUse = prob[k]
+    rvBinom  = rbinom(1,locationCount,pUse)
+    total = total + rvBinom
+    
+    # set up trace
+    trace = tibble(k = k, 
+                 rvBinom = rvBinom, 
+                 total = total, 
+                 intervalCounts = intervalCounts)
+  
+    
+    # check if total is less than location count
+    if(total < locationCount & k < (nGeneratedNumbers-1)){
+      # case 1
+      intervalCounts[k] = rvBinom
+    } else if(total < locationCount & k == (nGeneratedNumbers-1)){
+      # case 2
+      # if by the second last iteration, we still have not reached locationCount
+      # value, set final number equal what is needed
+      intervalCounts[k] = rvBinom
+      finalValue = locationCount-total
+      # update counter and sum
+      k=k+1
+      total = total + finalValue
+      intervalCounts[k] = finalValue
+      
+      
+    } else if(total >= locationCount & k <= (nGeneratedNumbers-1)){
+      # case 3
+      finalValue = locationCount-(total-rvBinom) # figure out last value 
+      intervalCounts[k] = finalValue
+      while(k<nGeneratedNumbers){
+        # fill in remaining intervals with 0
+        fillValue = 0
+        k=k+1
+        intervalCounts[k] = fillValue
+      }
+    } else if(duration==1){
+      if(rvBinom!=locationCount){
+        intervalCounts = locationCount
+      } else{
+        intervalCounts = rvBinom
+      }
+    }
+  }
+  #return(list(interval = intervalCounts,trace = trace)) 
+  return(intervalCounts)
+  
+  
+}
+```
+
+Store the probabilities as a list.
+```{r}
+# store vector of probabilities to a new column 
+dfPoissonProb = dfPoissonProb %>%
+  group_by(locationID)%>%
+  mutate(lstProb = I(list(p)))
+
+dfPoissonInput = dfPoissonProb%>%
+  group_by(locationID)%>%
+  summarise(locationID = locationID, 
+            N_i = N_i,
+            `Duration of Count`=max(`Duration of Count`),
+            lstProb = lstProb)
+dfPoissonInput = dfPoissonInput[!duplicated(dfPoissonInput),]
+dfPoissonInput
+```
+I  use mapply so that my function is vectorized and it runs faster.
+```{r}
+set.seed(1)
+poissonResult = mapply(generateIntervalCountsProb, dfPoissonInput$`Duration of Count`, intervalWidth,
+                       dfPoissonInput[,"lstProb"]$lstProb, dfPoissonInput$N_i)
+poissonResultFinal = t(poissonResult)
+```
+
+```{r}
+colnames(poissonResultFinal) = 1:ncol(poissonResultFinal)
+dfPoissonInputFinal = cbind(dfPoissonInput, poissonResultFinal)
+dfPoissonFinal = merge(dfPoissonProb, dfPoissonInputFinal[,c("locationID",
+                                                             colnames(poissonResultFinal))],
+                       by=c("locationID"),
+                       all.x=TRUE, all.y=TRUE)
+head(dfPoissonFinal)
+```
+
+### Plot Distribution of interval counts
+
+Interesting that at time interval 4 and 5, majority of the counts are at 0. 
+This probably has to do with the fact that if the maximum number of counts 
+were reached (based on $Ni$) then the rest of the counts went to 0. 
+
+Maybe this suggests I try a different method (ie randomly split the last 
+number between the last two intervals)? Or try varying detection probability 
+and see how it affects this distribution? 
+**ASK**
+```{r}
+dfPoissonFinalLong = dfPoissonFinal %>%
+  pivot_longer(cols = colnames(poissonResultFinal), names_to = "Interval", 
+               values_to = "IntervalValue")
+
+ggplot(dfPoissonFinalLong)+ 
+  geom_histogram(aes(x=IntervalValue))+ 
+  facet_wrap(~Interval)+ 
+  theme_minimal()+ 
+  labs(title = "Distribution of Interval Count Values", 
+       subtitle = "Across Various Location ID's", 
+       x = "Point Counts", 
+       y = "")
+```
+
+
