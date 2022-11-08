@@ -1,0 +1,264 @@
+---
+title: "Process to Create Point Count Data"
+author: "Tito"
+date: "2022-11-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(data.table)
+library(matrixStats)
+```
+
+
+# Q
+
+## Papers
+- If counts are done on whether the *species* is detected vs counting 
+the individual animal, how are abundance estimates still made based on detecting
+the species?
+  - I.e with the marsh monitoring program, need help understanding survey sheet
+- Example:https://borderlandsbirds.org/wp-content/uploads/2021/03/National-Marsh-Bird-Data-sheet_CentralAZ-1.pdf 
+
+
+
+## Methodology
+- Likelihood formula --> verify if it makes sense
+  - Marginal likelihood?
+  - Support K <- because we have discrete numbers?
+  - Likelihood based on multinomial distribution or a poisson mixture..
+- Estimating abundance: Likelihood vs method of moments...
+
+
+
+# Process to create Point Count Data
+
+## Set Variables
+```{r}
+p_1m = 0.1 # needs to be the same p_1m I use to generate summarized count data
+maxMinute = 10
+psi=0.6
+n_locations = 50
+lambda = 15 # get this number from some data?
+```
+
+
+## Generate Population Data
+```{r}
+set.seed(1)
+locationID = 1:n_locations
+#N_i = rpois(n_locations,lambda)
+N_i = rnbinom(n_locations, mu = lambda, size= 1)
+dfPop = as.data.frame(cbind(locationID, N_i))
+head(dfPop)
+```
+
+Create a function to model detection probability by time m
+
+```{r}
+PredictProbability = function(m, p1m){
+  # the way I think about this function is (for the time example): 
+  # p1m is the probability of detecting an individual within a 1 min interval 
+  # 1-p1m is the probability of not detecting an individual within a 1 min interval
+  # (1-p1m)^m is the probability of not detecting an individual at all within m minutes
+  # 1-((1-p1m)^m) is the probability of detecting an individual at least once within 
+  # m minutes
+  p_m = 1-((1-p1m)**m)
+  return(p_m)
+}
+```
+
+```{r}
+# generating point counts ci ~ Bin(Ni,p)
+generatePointCount = function(Ni,p_1m,maxMinute){
+  NiUse = ifelse(Ni==0,1,Ni)
+  individuals = 1:NiUse
+  survey_1 = as.data.frame(individuals)
+  #survey_1$locationID = locationID
+  
+  # generate a binomial distribution of counts, where detection probability 
+  # depends on time (maxMinute)
+  set.seed(1)
+  for(time in 1:maxMinute){
+    #p_m = PredictProbability(time,p_1m)
+    
+    # rbinom(10,1,0.2) not the same as rbinom(1,10,0.2)...
+    
+    
+    # I'm saying each individual is either counted or not (bernoulli)
+    # this data is already incremental :)
+    
+    # handle edge case when NI = 0
+    if(Ni==0){
+      sample_count = as.data.frame(0)
+    } else{
+      sample_count = as.data.frame(rbinom(nrow(survey_1),1,p_1m))
+    }
+    colnames(sample_count)=time
+    survey_1 = cbind(survey_1,sample_count)
+  }
+  
+  # do some manipulation to find total point count at the location 
+  totalCount= rowSums(survey_1[,as.character(1:maxMinute)])
+  totalCount= ifelse(totalCount>0,1,0)
+  totalCount = sum(totalCount)
+  
+  # make the data incremental
+  # survey_1_d = copy(survey_1) # make a duplicate to reference
+  # for(column in 2:ncol(survey_1_d)){
+  #   if(column==2){
+  #    next()
+  #   } else{
+  #     survey_1[,column] = survey_1[,column] -survey_1_d[,column-1]
+  #     # case for if previous column was a number but new column is 0
+  #     survey_1[,column]= ifelse(survey_1[,column]<0,0,survey_1[,column])
+  #   }
+  # }
+  
+  return(list(survey_1,totalCount))
+} 
+```
+
+
+## Results for Bin(Ni,p)
+```{r}
+result = sapply(dfPop$N_i, generatePointCount,p_1m,maxMinute)
+dfPop$C_i = unlist(result[2,])
+```
+
+
+```{r}
+locationID = 1
+finalDF = matrix(NA,0,0)
+
+for (df in 1:length(result[1,])){
+  dfTemp = result[1,][[df]]
+  dfTemp$locationID = locationID
+  
+  if(df==1){
+    finalDF = dfTemp
+  } else {
+   finalDF = rbind(finalDF, dfTemp)
+  }
+
+  locationID = locationID+1
+}
+```
+
+
+```{r}
+# first number represents the location, second number represents the individual
+finalDF$UniqueIdentifier = paste(finalDF$locationID,finalDF$individuals)
+
+# find cumulative sum
+colsUse = as.character(1:maxMinute)
+tempdf = as.matrix(finalDF[,colsUse])
+tempdf = rowCumsums(tempdf)
+tempdf = as.data.frame(tempdf)
+colnames(tempdf) = colsUse
+
+# add some more details to the cumulative counts dataframe
+tempdf$locationID= finalDF$locationID
+tempdf$individuals = finalDF$individuals
+tempdf$UniqueIdentifier = finalDF$UniqueIdentifier
+
+
+# view
+# tempdf shows cumulative sum of counts for the individual
+head(tempdf)
+# final df is the sparse matrix of detection history
+head(finalDF)
+# dfPop is the summarised counts - generated from finalDF values
+head(dfPop)
+```
+
+# Graphing
+
+Some graphs to see if generated results make sense
+
+Distribution of counts is similar to the population - but range is not as large 
+which is how it should be. Looks reasonable. 
+```{r}
+dfPop %>%
+  pivot_longer(cols = c("N_i","C_i"), names_to = "CountType", values_to = "Value")%>%
+  ggplot()+ 
+  geom_density(aes(x=Value, color = CountType, fill = CountType),alpha=0.7)+ 
+  facet_wrap(~CountType,scales="free")+ 
+  theme_minimal()+ 
+  labs(title = "Distribution of Site Specific Population Values Against Point Counts",
+       subtitle = "Point counts follow a binomial distribution")
+```
+Similar to the probability of detecting an individual at least once
+```{r}
+mean(dfPop$C_i/dfPop$N_i,na.rm=TRUE)
+PredictProbability(maxMinute,p_1m)
+```
+
+Graph shows the distribution of the number of times each individual has been counted
+by the end of five minutes. Graph makes sense seeing as more time passes, number
+of individuals that have been counted 1 or 2 times grows --> looks like a multinomial 
+distribution. 
+
+```{r}
+tempdf%>%
+  pivot_longer(cols = c(colsUse), names_to = "Time", values_to = "Count")%>%
+ggplot()+ 
+  geom_density(aes(x=Count, fill = Time, color = Time),alpha=0.6)+ 
+  facet_wrap(~Time,scales= "free")+ 
+  theme_minimal()+
+  labs(title= "Cumulative Point Counts by Time Interval")
+```
+
+## Checking Detection Probability 
+
+If c/p is an estimator for $\hat{p}$ then I want to see how it changes as 
+the time interval changes. 
+```{r}
+finalDF %>%
+  pivot_longer(cols = c(colsUse), names_to = "TimeInterval", values_to = "Count")%>%
+  group_by(locationID, TimeInterval)%>%
+  summarise(TotalCount = sum(Count))
+```
+
+Find the implied p_hat of the data. 
+```{r}
+CountByTimeInterval = tempdf %>%
+  pivot_longer(cols = c(colsUse), names_to = "TimeInterval", values_to = "Count")%>%
+  group_by(UniqueIdentifier,TimeInterval)%>%
+  filter(Count>0) %>% # filter out counts that are 0 so we only count individuals present
+  group_by(locationID,TimeInterval) %>%
+  summarise(Count = n()) # find number of individuals detected at least once
+
+# add information about dfPop
+CountByTimeInterval = left_join(CountByTimeInterval,dfPop)
+# find p_hat
+CountByTimeInterval$p_hat = CountByTimeInterval$Count/CountByTimeInterval$N_i
+head(CountByTimeInterval)
+```
+
+```{r}
+# find theoretical probability of being detected at least once
+summaryPhat = CountByTimeInterval %>%
+  group_by(TimeInterval)%>%
+  summarise(p_data = mean(p_hat))
+summaryPhat$TimeInterval = as.numeric(summaryPhat$TimeInterval)
+summaryPhat$p_theoretical = PredictProbability(summaryPhat$TimeInterval, p_1m)
+```
+
+
+```{r}
+summaryPhat %>%
+  pivot_longer(cols=c("p_data","p_theoretical"),names_to = "Type",values_to = "p" )%>%
+ggplot()+
+  geom_point(aes(x=TimeInterval, y = p,color=Type))+ 
+  geom_line(aes(x=TimeInterval, y = p,color= Type))+
+  theme_minimal()+ 
+  labs(title = "Comparison of Estimated Detection Probability and Theoretical Probability",
+       subtitle = "Theoretical probability is the probability of being detected at least once.")
+```
+
