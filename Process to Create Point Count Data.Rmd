@@ -75,7 +75,7 @@ PredictProbability = function(m, p1m){
 
 ```{r}
 # generating point counts ci ~ Bin(Ni,p)
-generatePointCount = function(Ni,p_1m,maxMinute){
+generatePointCount = function(Ni,p_1m,maxMinute, seed = NULL){
   NiUse = ifelse(Ni==0,1,Ni)
   individuals = 1:NiUse
   survey_1 = as.data.frame(individuals)
@@ -83,7 +83,9 @@ generatePointCount = function(Ni,p_1m,maxMinute){
   
   # generate a binomial distribution of counts, where detection probability 
   # depends on time (maxMinute)
-  set.seed(1)
+  if(!is.null(seed))
+    set.seed(seed)
+  
   for(time in 1:maxMinute){
     #p_m = PredictProbability(time,p_1m)
     
