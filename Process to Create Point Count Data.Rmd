@@ -104,9 +104,7 @@ generatePointCount = function(Ni,p_1m,maxMinute){
   }
   
   # do some manipulation to find total point count at the location 
-  totalCount= rowSums(survey_1[,as.character(1:maxMinute)])
-  totalCount= ifelse(totalCount>0,1,0)
-  totalCount = sum(totalCount)
+  totalCount= sum(rowSums(survey_1[,as.character(1:maxMinute)]) > 0)
   
   # make the data incremental
   # survey_1_d = copy(survey_1) # make a duplicate to reference
