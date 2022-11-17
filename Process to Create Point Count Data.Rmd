@@ -76,9 +76,6 @@ PredictProbability = function(m, p1m){
 ```{r}
 # generating point counts ci ~ Bin(Ni,p)
 generatePointCount = function(Ni,p_1m,maxMinute, seed = NULL){
-  NiUse = ifelse(Ni==0,1,Ni)
-  individuals = 1:NiUse
-  survey_1 = as.data.frame(individuals)
   #survey_1$locationID = locationID
   
   # generate a binomial distribution of counts, where detection probability 
@@ -86,41 +83,44 @@ generatePointCount = function(Ni,p_1m,maxMinute, seed = NULL){
   if(!is.null(seed))
     set.seed(seed)
   
-  for(time in 1:maxMinute){
-    #p_m = PredictProbability(time,p_1m)
-    
-    # rbinom(10,1,0.2) not the same as rbinom(1,10,0.2)...
-    
-    
-    # I'm saying each individual is either counted or not (bernoulli)
-    # this data is already incremental :)
-    
-    # handle edge case when NI = 0
-    if(Ni==0){
-      sample_count = as.data.frame(0)
-    } else{
+  if(Ni == 0){
+    result <- list(NULL, 0)
+  }
+  else{
+    individuals = 1:Ni
+    survey_1 = as.data.frame(individuals)
+    for(time in 1:maxMinute){
+      #p_m = PredictProbability(time,p_1m)
+      
+      # rbinom(10,1,0.2) not the same as rbinom(1,10,0.2)...
+      
+      
+      # I'm saying each individual is either counted or not (bernoulli)
+      # this data is already incremental :)
+      
       sample_count = as.data.frame(rbinom(nrow(survey_1),1,p_1m))
+      colnames(sample_count)=time
+      survey_1 = cbind(survey_1,sample_count)
     }
-    colnames(sample_count)=time
-    survey_1 = cbind(survey_1,sample_count)
+    
+    # do some manipulation to find total point count at the location 
+    totalCount= sum(rowSums(survey_1[,as.character(1:maxMinute)]) > 0)
+    
+    # make the data incremental
+    # survey_1_d = copy(survey_1) # make a duplicate to reference
+    # for(column in 2:ncol(survey_1_d)){
+    #   if(column==2){
+    #    next()
+    #   } else{
+    #     survey_1[,column] = survey_1[,column] -survey_1_d[,column-1]
+    #     # case for if previous column was a number but new column is 0
+    #     survey_1[,column]= ifelse(survey_1[,column]<0,0,survey_1[,column])
+    #   }
+    # }
+    result <- list(survey_1,totalCount)  
   }
   
-  # do some manipulation to find total point count at the location 
-  totalCount= sum(rowSums(survey_1[,as.character(1:maxMinute)]) > 0)
-  
-  # make the data incremental
-  # survey_1_d = copy(survey_1) # make a duplicate to reference
-  # for(column in 2:ncol(survey_1_d)){
-  #   if(column==2){
-  #    next()
-  #   } else{
-  #     survey_1[,column] = survey_1[,column] -survey_1_d[,column-1]
-  #     # case for if previous column was a number but new column is 0
-  #     survey_1[,column]= ifelse(survey_1[,column]<0,0,survey_1[,column])
-  #   }
-  # }
-  
-  return(list(survey_1,totalCount))
+  return(result)
 } 
 ```
 
@@ -137,15 +137,17 @@ locationID = 1
 finalDF = matrix(NA,0,0)
 
 for (df in 1:length(result[1,])){
-  dfTemp = result[1,][[df]]
-  dfTemp$locationID = locationID
-  
-  if(df==1){
-    finalDF = dfTemp
-  } else {
-   finalDF = rbind(finalDF, dfTemp)
+  if(!is.null(result[1,][[df]])){
+    dfTemp = result[1,][[df]]
+    dfTemp$locationID = locationID
+    
+    if(df==1){
+      finalDF = dfTemp
+    } else {
+      finalDF = rbind(finalDF, dfTemp)
+    }
   }
-
+  
   locationID = locationID+1
 }
 ```
