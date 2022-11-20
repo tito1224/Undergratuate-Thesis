@@ -1,6 +1,11 @@
 # r script that contains functions to generate and analyze error free 
 # point count data
 
+# load libraries
+library(tidyverse)
+library(data.table)
+library(matrixStats)
+
 # predict the probability of detecting a bird at least once within m minutes
 PredictProbability = function(m, p1m){
   # the way I think about this function is (for the time example): 
