@@ -1,0 +1,133 @@
+---
+output: 
+  pdf_document:
+    keep_tex: true
+    fig_caption: true
+    latex_engine: pdflatex
+  html_document:
+    theme: cerulean
+    toc: true
+    toc_float: true
+    toc_depth: 2
+header-includes:
+  - \usepackage{amsmath}
+  - \usepackage{graphicx}
+title: "Closed Population Models"
+date: "November 9, 2022"
+geometry: margin=1in
+fontsize: 11pt
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+# Introduction
+
+I will assume that the data are collected from a closed population of $N$ individuals over $K$ capture occasions. On each occasion, individuals are sampled from the population, marked if they have not been captured previously, and returned to the population. I will denote the number of individuals captured at least once by $n$ and let $Y_{it}$ denote the indicator of whether or not $i$ is captured on occasion $t$ so that $Y_{it}=1$ if individual $i$ is captured on occasion $t$ and 0 if not. I will use upper case to denote random varialbes ($Y_{it}$) and lower case to denote the observed value $y_{it}$ The capture history for individual $i$ is $\mathbf Y_{i}=(Y_{i1},\ldots,Y_{iT})$, and I will let $\mathbf Y$ denote the $n \times T$ matrix of observed capture histories so that the capture history for the $i$-th marked individual is in row $i$.
+
+# General Model
+
+The most straightforward way to write down the likelihood for the general closed population model is to imagine that the capture histories are assigned to individuals in two stages. First, we determine how many individuals are captured ($n$). Then, we assign the capture histories to the marked individuals knowing that the $N-n$ unmarked individuals will have capture histories that are all 0s. 
+
+For the first part, I will let $p^*$ denote that probability that an individual is captured at least one time and $p_{ik}$ denote the probability that individual $i$ is captured on occasion $k$. This is actually redundant because it's always possible to write $p^*$ as a function of the $p_{ik}$. However, the exact relationship depends on the assumptions about how $p_{ik}$ varies over time and so the extra notation is needed to write down the model in general. I will discuss some of the specific models below and show how $p^*$ and $p_{ik}$ are related. 
+
+## Distribution of $n$
+
+First we consider the distribution of the number of marked individuals, $n$. One assumption of the mark-recapture model is that events are independent across individuals. In this case, the number of individuals captured at least once follows a binomial distribution:
+\[
+ n|N \sim \mbox{Binomial}(n,p^*). 
+\]
+The pmf is then
+\[
+P(n|N)={N \choose n}{p^*}^n(1-p^*)^{N-n}. 
+\]
+
+## Distribution of $Y$ given $n$
+
+Next we consider the distribution of the capture histories for the $n$ marked individuals. Conditioning on the fact that an individual is marked is equivalent to conditioning on the capture history containing at least one 1 or $\sum_{k=1}^K Y_{ik}>0$. For a single individual, we get that:
+\begin{align*}
+P(\mathbf Y_i | \sum_{k=1}^K Y_{ik}>0)
+&=\frac{P(\mathbf Y_i , \sum_{k=1}^K Y_{ik}>0)}{P(\sum_{k=1}^K Y_{ik}>0))}\\
+&=\frac{\prod_{k=1}^K p_{ik}^{y_{ik}}(1-p_{ik})^{1-{y_{ik}}}}{p^*}
+\end{align*}
+Putting this together for all $n$ observed individuals we have
+\begin{align*}
+P(\mathbf Y |n)
+& = \prod_{i=1}^n P(\mathbf Y_i | \sum_{k=1}^K Y_{ik}>0)\\
+&=\prod_{i=1}^n \frac{\prod_{k=1}^K p_{ik}^{y_{ik}}(1-p_{ik})^{1-{y_{ik}}}}{p^*}\\
+&=\frac{\prod_{i=1}^n \prod_{k=1}^K p_{ik}^{y_{ik}}(1-p_{ik})^{1-{y_{ik}}}}{{p^*}^n}
+\end{align*}
+
+## Distribution of $Y$
+
+Finally, we combine these two to construct the distribution of the matrix of observed capture histories, $\mathbf Y$. The joint distribution of $\mathbf Y$ and $n$ can be written as
+\[
+P(\mathbf Y|N)=P(\mathbf Y | n)P(n|N). 
+\]
+The pieces on the right-hand side are the distributions of $\mathbf Y|n$ and $n|N$ given in the previous two sections and so we get that
+\begin{align*}
+P(\mathbf Y|N)
+&={N \choose n}{p^*}^n(1-p^*)^{N-n} \cdot \frac{\prod_{i=1}^n \prod_{k=1}^K p_{ik}^{y_{ik}}(1-p_{ik})^{1-{y_{ik}}}}{{p^*}^n}\\
+&={N \choose n}(1-p^*)^{N-n} \prod_{i=1}^n \prod_{k=1}^K p_{ik}^{y_{ik}}(1-p_{ik})^{1-{y_{ik}}}.
+\end{align*}
+This is the general expression for the likelihood of a closed population model.
+
+# Models of Otis et al. (1978)
+
+Otis et al. (1978) describes eight different models for the closed population capture recapture experiment that combine 3 different possible causes of variation in the capture probabilities: variation over time ($t$), variation between individuals -- called heterogeneity ($h$), and variation due to behavioural effects ($b$). The 8 models are denoted by $\mathcal M$ with subscripts denoting which of the 3 effects are present. E.g., $\mathcal M_t$ denotes the model with only the time effect, $\mathcal M_{th}$ denotes the model with time and individual variation, etc. I won't discuss all of these, but it is helpful to look at a few examples to illustrate the likelihood and to show how it might be simplified in different cases.
+
+## Model 1: $\mathcal M_0$
+
+The simplest model, denoted by $\mathcal M_0$, is the one in which the capture probability is the same for all individuals on all occasion: $p_{ik}=p$. In this case, the probability that an individual is captured at least one time is
+\[
+p^*=1 - (1-p)^K.
+\]
+Hence, the likelihood becomes
+\begin{align*}
+P(\mathbf Y|N,p)
+&={N \choose n}(1-p)^{K(N-n)} \prod_{i=1}^n \prod_{k=1}^K p^{y_{ik}}(1-p)^{1-{y_{ik}}}\\
+&={N \choose n}(1-p)^{K(N-n)} p^{y_{Tot}} (1-p)^{NK-y_{Tot}}.
+\end{align*}
+where $y_{Tot}=\sum_{i=1}^n \sum_{k=1}^K y_{ik}$ represents the total number of captures of all individuals over all occasions. This is the sufficient statistic for model $\mathcal M$. 
+
+## Model 2: $\mathcal M_t$
+
+If the capture probabilities vary across the occasions but not between individuals then we can set $p_{ik}=p_k$. In this case, the probability of being captured at least one time is
+\[
+p^*=1-\prod_{k=1}^K (1-p_k)
+\]
+and the likelihood becomes
+\begin{align*}
+P(\mathbf Y|N,p_1,\ldots,p_K)
+&={N \choose n}(\prod_{k=1}^K (1-p_k))^{N-n} \prod_{i=1}^n \prod_{k=1}^K p_{k}^{y_{ik}}(1-p_{k})^{1-{y_{ik}}}\\
+&={N \choose n}(\prod_{k=1}^K (1-p_k))^{N-n}  p_{k}^{y_{\cdot k}}(1-p_{k})^{K-{y_{\cdot k}}}
+\end{align*}
+where $y_{\cdot k}$ represents the number of individuals captured on occasion $k$. These are the sufficient statistics for model $\mathcal M_t$. 
+
+## Model 3: $\mathcal M_{b}$
+
+Model $mathcal M_{b}$ allows the capture probability to change after an individual is first captured. It may increase (a trap happy effect) or decrease (a trap shy effect). I will let $p$ denote the probability that an individual is capture on any occasion given that it was not captured before and $r$ the probability that it is captured given that it was capture before (i.e., the probability of recapture). Mathematically, $p_{i1}$ (because individuals cannot be captured before the first occasion and)
+$$
+p_{ik}=
+\left\{
+\begin{array}{ll}
+p & \sum_{s=1}^{k-1} y_{is} = 0\\
+r & \sum_{s=1}^{k-1} y_{is} > 0\\
+\end{array}
+\right..
+$$
+for $k=2,\ldots,K$. In this case, 
+\[
+p^*=1-(1-p)^K
+\]
+just as for model $\mathcal M_t$. The likelihood becomes
+\begin{align*}
+P(\mathbf Y|N)
+&={N \choose n}(1-p)^{K(N-n)} \prod_{i=1}^n \prod_{k=1}^K p_{ik}^{y_{ik}}(1-p_{ik})^{1-{y_{ik}}}\\
+&={N \choose n}(1-p)^{K(N-n)} \prod_{i=1}^n (1-p)^{a_i-1}p r^{\sum_{k=a_i+1}^K y_{ik}}(1-r)^{K-a_{i}-\sum_{k=a_i+1}^K y_{ik}}
+\end{align*}
+where $a_i=\min\{k:y_{ik}=1\}$ represents the occasion on which individual $i$ was first captured. The contribution for each individual represents the probability that individual $i$ was first captured on occasion $a_i$ and then recaptured $\sum_{k=a_i+1}^K y_{ik}$ times after $a_i$. These two pieces of information represent the sufficient statistics for this model. 
+
+# Notes
+
+I stressed the sufficient statistics for the different model because I believe that what you were doing in your code and your notes was to switch between models using the full data (i.e., the complete capture histories) and summary statistics (e.g., the number of times each individual was captured). It's important to realize that these can be the same provided that the summary statistics are sufficient statistics. For example, you can construct the likelihood in terms of the number of individuals captured on each occasion if you assume that the capture probability varies over time but not between individuals (model $\mathcal M_t$). However, this is not correct if you allow for a behavioural effect. The best thing to do is to always start with the most general model and then simplify it if you can.  

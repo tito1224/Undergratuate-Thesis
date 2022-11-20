@@ -1,0 +1,418 @@
+---
+title: "Simulate Regular Data (V2)"
+author: "Tito"
+date: "2022-10-31"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+editor_options:
+  markdown:
+    wrap: 100
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load Packages
+
+```{r}
+library(tidyverse)
+library(data.table)
+library(matrixStats)
+```
+
+# Q
+
+-   Species to focus on?
+
+# Simulate Base Case
+
+To simulate the data, I will choose around 50 locations, and simulate the total population at each
+location. Let $N_i$ represent the population at each location $i$.
+
+I'm not sure whether I want the population to follow a poisson or negative binomial distribution - I
+can try both!
+
+
+I can think of the counts at each location ($C_i$) as a binomial random variable. However to do
+this, I need not only the size ($N_i$) but I need the probability.
+
+Modelling this probability is a little tricky but I will do it with time as a 
+covariate.
+
+# Detection Probability with Time as a Covariate
+
+From the paper *A Conceptual Guide to Detection Probability for Point Counts and Other Count-based
+Survey Methods* I know that I can model detection probability with time as a covariate. We expect
+detection probability to change as the duration of the count increases. To model this we need the
+following:
+
+-   m = duration of the count
+-   $p_{1m}$ = detection probability for a 1 min count
+    -   **Note**: The smallest time interval I will have in my simulation is 1 mins
+
+Create a function to model detection probability by time m
+
+```{r}
+PredictProbability = function(m, p1m){
+  # the way I think about this function is (for the time example): 
+  # p1m is the probability of detecting an individual within a 1 min interval 
+  # 1-p1m is the probability of not detecting an individual within a 1 min interval
+  # (1-p1m)^m is the probability of not detecting an individual at all within m minutes
+  # 1-((1-p1m)^m) is the probability of detecting an individual at least once within 
+  # m minutes
+  p_m = 1-((1-p1m)**m)
+  return(p_m)
+}
+```
+
+Set my constants and plot. The graph below makes sense to me as higher detection probabilities in 1
+min intervals means that probability of counting all individuals in the area increases.
+
+```{r}
+# let m vary from 1 min to 90 mins
+maxMinute = 90
+m = 1:maxMinute
+# let p_1m vary from a low detection probability to a higher one with 1 min intervals
+p_1m = c(0.05,0.1,0.2)
+p_1m_col = rep(p_1m, maxMinute)
+
+# make the dataframe of probabilities
+dfProbabilityTime = tibble(m=m)
+dfProbabilityTime = dfProbabilityTime %>%
+  slice(rep(1:n(), each = length(p_1m)))
+dfProbabilityTime = dfProbabilityTime%>%
+  mutate(p_1m = p_1m_col, 
+         p_m = PredictProbability(m,p_1m))
+
+# show results
+head(dfProbabilityTime)
+ggplot(dfProbabilityTime)+ 
+  geom_line(aes(x=m, y = p_m, color = as.factor(p_1m)))+ 
+  theme_minimal()+ 
+  labs(title = "Detection Probability at Duration m", 
+       x = "M minutes", 
+       y = "Detection Probability by Time m", 
+       color = "Detection Probability for 1 Minute Count")
+  
+  
+```
+
+For now I will model detection probability as a function of time - but keep in mind
+that it can be done as a function of cues. 
+
+
+# Varying p across sites
+
+Now that I know I will be modelling p as a function of time I can model $p_i$ for
+each site. However there is heterogeneity in detection probability across
+various sites. It would be unreasonable to assume that $p_i$ is constant across
+each site $i$. 
+
+I'm not sure what distribution p would follow - so for now I will leave it as 
+constant and come back to this part. 
+
+## NB
+
+A negative binomial distribution can also arise as a mixture of Poisson distributions
+with mean distributed as a gamma distribution. So if I have a poisson distribution 
+with mean alpha, it means that alpha has a gamma distribution. 
+
+```{r}
+set.seed(1)
+n_locations = 50
+lambda = 15 # get this number from some data?
+locationID = 1:n_locations
+#N_i = rpois(n_locations,lambda)
+N_i = rnbinom(n_locations, mu = lambda, size= 1)
+
+dfNB = as.data.frame(cbind(locationID, N_i))
+head(dfNB)
+```
+
+I used a NB model for now because it allows me to generate 0 at certain $N_i$ whereas
+with poisson I could not. I think it makes sense to have the 0 values at some sites
+to simulate the fact that some sites are unoccupied.
+```{r}
+set.seed(1)
+# produce detection probabilities after duration m
+p_1m = 0.1
+maxMinute = 5
+p = PredictProbability(maxMinute,p_1m)
+
+# model point counts at each site
+dfNB$C_i = rbinom(nrow(dfNB), dfNB$N_i, p)
+dfNB
+```
+
+
+## Survey Data
+
+For each individual bird, whether they are detected or not is a binary random 
+variable. If they are detected during a time interval, it is denoted as 1 else 0. 
+
+Issues that may arise are: 
+
+- There might be non-detection at sites that have birds --> i.e. we sample 0's the entire
+count duration but birds are there
+- We might have non-detection because the site is unoccupied
+
+There are locations where we might zero counts for $N_i$. As such, we can describe 
+the data as a function of two processes (MacKenzie et al. (2002)):
+
+1. Binomial distribution --> conditional on animals being present at the site
+2. Occupation --> each site has a probability $\psi$ of being occupied. 
+
+So $C_i$ can be described as follows:
+
+$$
+
+C_i = \\
+
+    0 \text{ w.p. } 1-\psi  \\
+    Bin(N_i,p_i) \text{ w.p. } \psi \\
+    
+    \text{where } \psi = \text{ probability of the site being occupied}
+    
+
+
+$$
+
+
+
+So ideally we need a way to estimate both probability of detection and the occupancy 
+rate of the site. 
+
+Another way to think about it (Norris and Pollock 1996) is that the detection 
+probability is going to either be a non zero number (p) or it will be 0 if the site 
+is occupied. 
+
+
+This means I will want to model the count as a zero inflated binomial 
+model instead. Let's try and see what the results are:
+
+
+```{r}
+generateZeroInflatedBinomial= function(n,size,detectionProb,psi){
+  set.seed(1)
+  # generate data assuming P(C_i>0)= \psi
+  X = rbinom(n,size,detectionProb)
+  
+  # generate a Bernoulli distribution to represent whether the site is 
+  # occupied or not
+  Y = as.numeric(rbernoulli(n,psi))
+  
+  # return the product of the distributions
+  Z = X*Y
+  
+}
+```
+
+Make a function to generate counts using zero inflated model
+```{r}
+generateCounts = function(Ni_temp, p_1m, maxTime, psi){
+  # find count at end of sampling period
+  set.seed(1)
+  
+  # find detection probability at end of sampling period
+  p_duration = PredictProbability(maxTime,p_1m)
+  
+  # generate a count of how many times we detect each individual in the population 
+  # at location i
+  sample_count = as.data.frame(generateZeroInflatedBinomial(Ni_temp,maxTime,p_duration,psi))
+  colnames(sample_count)="final_count"
+  
+  # simplify to binary values for summation (ie we detect at least once)
+  sample_count$final_count = ifelse(sample_count$final_count>0,1,0)
+  final_count = sum(sample_count)
+  return(final_count)
+}
+```
+
+
+```{r}
+p_1m = 0.1 # needs to be the same p_1m I use to generate summarized count data
+maxMinute = 5
+psi=0.6
+dfNB$C_i2 = sapply(dfNB$N_i, generateCounts, p_1m, maxMinute, psi)
+```
+
+```{r}
+oldNB = dfNB
+head(oldNB)
+```
+
+```{r}
+dfNB %>%
+  pivot_longer(cols = c("N_i","C_i","C_i2"), names_to = "Type", values_to = "Value")%>%
+  ggplot()+
+  geom_density(aes(x=Value, fill = Type,color=Type),alpha=0.7)+
+  facet_wrap(~Type)+
+  theme_minimal()+
+  labs(title="Distribution of N_i vs C_i vs C_i2",x ="Count")
+```
+
+Distribution is pretty different since $\psi$ is low. 
+
+To get data in point count format, I will one again use a binomial distribution 
+but this time, will modify the detection probability based on duration. 
+
+
+
+# Process to create Point Count Data
+```{r}
+set.seed(1)
+p_1m = 0.1 # needs to be the same p_1m I use to generate summarized count data
+maxMinute = 5
+psi=0.6
+n_locations = 50
+lambda = 15 # get this number from some data?
+locationID = 1:n_locations
+#N_i = rpois(n_locations,lambda)
+N_i = rnbinom(n_locations, mu = lambda, size= 1)
+
+dfNB = as.data.frame(cbind(locationID, N_i))
+head(dfNB)
+```
+
+
+```{r}
+generateZeroInflatedBinomial= function(n,size,detectionProb,psi){
+  set.seed(1)
+  # generate data assuming P(C_i>0)= \psi
+  X = rbinom(n,size,detectionProb)
+  
+  # generate a Bernoulli distribution to represent whether the site is 
+  # occupied or not
+  Y = as.numeric(rbernoulli(n,psi))
+  
+  # return the product of the distributions
+  Z = X*Y
+  
+}
+```
+
+
+```{r}
+# generating point counts wi ~ Bin(Ni,p)
+generatePointCount = function(Ni,p_1m,maxMinute){
+  individuals = 1:Ni
+  survey_1 = as.data.frame(individuals)
+  #survey_1$locationID = locationID
+  
+  # generate a binomial distribution of counts, where detection probability 
+  # depends on time (maxMinute) 
+  for(time in 1:maxMinute){
+    p_m = PredictProbability(time,p_1m)
+    
+    # rbinom(10,1,0.2) not the same as rbinom(1,10,0.2)...
+    
+    
+    # I'm saying each individual is either counted or not (bernoulli)
+    # but because I am repeating this Ni times, it should be equal to rbinom(1,Ni,p)
+    # when i run examples on R however I don't get this result.... *ask!!*
+    # this data is already incremental :)
+    set.seed(1)
+    sample_count = as.data.frame(rbinom(nrow(survey_1),1,p_m))
+    colnames(sample_count)=time
+    survey_1 = cbind(survey_1,sample_count)
+  }
+  
+  # do some manipulation to find total point count at the location 
+  totalCount= rowSums(survey_1[,as.character(1:maxMinute)])
+  totalCount= ifelse(totalCount>0,1,0)
+  totalCount = sum(totalCount)
+  
+  # make the data incremental
+  # survey_1_d = copy(survey_1) # make a duplicate to reference
+  # for(column in 2:ncol(survey_1_d)){
+  #   if(column==2){
+  #    next()
+  #   } else{
+  #     survey_1[,column] = survey_1[,column] -survey_1_d[,column-1]
+  #     # case for if previous column was a number but new column is 0
+  #     survey_1[,column]= ifelse(survey_1[,column]<0,0,survey_1[,column])
+  #   }
+  # }
+  
+  return(list(survey_1,totalCount))
+} 
+```
+
+
+## Results for Bin(Ni,p)
+```{r}
+result = sapply(dfNB$N_i, generatePointCount,p_1m,maxMinute,psi)
+dfNB$C_i = unlist(result[2,])
+```
+
+
+```{r}
+locationID = 1
+finalDF = matrix(NA,0,0)
+
+for (df in 1:length(result[1,])){
+  dfTemp = result[1,][[df]]
+  dfTemp$locationID = locationID
+  
+  if(df==1){
+    finalDF = dfTemp
+  } else {
+   finalDF = rbind(finalDF, dfTemp)
+  }
+
+  locationID = locationID+1
+}
+```
+
+
+
+
+```{r}
+# first number represents the location, second number represents the individual
+finalDF$UniqueIdentifier = paste(finalDF$locationID,finalDF$individuals)
+
+# find cumulative sum
+colsUse = as.character(1:maxMinute)
+tempdf = as.matrix(finalDF[,colsUse])
+tempdf = rowCumsums(tempdf)
+tempdf = as.data.frame(tempdf)
+colnames(tempdf) = colsUse
+head(tempdf)
+head(finalDF)
+head(dfNB)
+```
+
+
+# Graphing
+
+Some graphs to see if generated results make sense
+
+```{r}
+dfNB %>%
+  pivot_longer(cols = c("N_i","C_i"), names_to = "CountType", values_to = "Value")%>%
+  ggplot()+ 
+  geom_density(aes(x=Value, color = CountType, fill = CountType),alpha=0.7)+ 
+  facet_wrap(~CountType)+ 
+  theme_minimal()+ 
+  labs(title = "Distribution of Site Specific Population Values Against Point Counts",
+       subtitle = "Point counts follow a binomial distribution")
+```
+
+
+Graph shows the distribution of the number of times each individual has been counted. 
+Since the p_i depends on N_i what I'm seeing is that the same individuals are being 
+counted more times as the length of the time period increases. So as time increases, 
+yes we have more "counts" but it's more counts of the same individual. 
+```{r}
+tempdf%>%
+  pivot_longer(cols = c(colsUse), names_to = "Time", values_to = "Count")%>%
+ggplot()+ 
+  geom_density(aes(x=Count, fill = Time, color = Time),alpha=0.6)+ 
+  facet_wrap(~Time,scales= "free")+ 
+  theme_minimal()+
+  labs(title= "Cumulative Point Counts by Time Interval")
+```
+
