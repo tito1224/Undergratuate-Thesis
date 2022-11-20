@@ -194,15 +194,19 @@ for(row in 1:1){
 }
 ```
 
-Generalize into a function, and take care of cases where Ni is 0.
-
+Generalize into a function, and take care of cases where no movement occurs.
 ```{r}
 generateErrors = function(dfPointCount,latentMatrix,maxMinute){
-
-  finalDF = matrix(NA,0,0)
-  for(row in 1:nrow(latentMatrix)){
   
+  # handle the cases where latentMatrix is NULL (because population is zero at that location)
+  if(is.null(latentMatrix)){
+    finalDF = NULL
+  } else {
+    finalDF = matrix(NA,0,0)
+    for(row in 1:nrow(latentMatrix)){
+
     # select a row to isolate detection history and movement history for an individual
+    locationID = dfPointCount[row,]$locationID
     originalHistory = as.numeric(dfPointCount[row,2:(maxMinute+1)]) # this will be updated as we loop through time intervals and make splits
     latentVector = as.numeric(latentMatrix[row,2:(maxMinute)])
     
@@ -219,6 +223,7 @@ generateErrors = function(dfPointCount,latentMatrix,maxMinute){
       tempDF = as.data.frame(tempDF)
       tempDF$individuals = row
       tempDF$individuals = as.character(tempDF$individuals)
+      tempDF$locationID = locationID
       
       # return two vectors!
       if(nrow(finalDF)==0){
@@ -246,6 +251,7 @@ generateErrors = function(dfPointCount,latentMatrix,maxMinute){
         rownames(tempDF) = NULL
         tempDF = as.data.frame(tempDF)
         tempDF$individuals = paste0(row,"_",time,letters[1:2])
+        tempDF$locationID = locationID
         
         # update originalHistory vector so that it is the vector of the "new" individual
         originalHistory = new_time_move
@@ -263,11 +269,10 @@ generateErrors = function(dfPointCount,latentMatrix,maxMinute){
         } else {
           finalDF = bind_rows(finalDF, tempDF)
         }
-        
       } 
     }
-    
   }
+}
   
   # remove duplicated rows 
   return(finalDF)
@@ -277,5 +282,10 @@ generateErrors = function(dfPointCount,latentMatrix,maxMinute){
 
 ```{r}
 generateErrors(dfRegular[1:1,], latentMatrix[1:1,], maxMinute)
+```
+
+```{r}
+head(dfRegular)
+generateLatentMatrix(0,0.3,5,1)
 ```
 
