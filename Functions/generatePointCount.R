@@ -45,7 +45,7 @@ generatePointCount = function(Ni,p_1m,maxMinute, seed = NULL){
 
 
 # return point count data in incremental, cumulative, and summarized formats
-returnData = function(N_i){
+returnData = function(Ni,p_1m,maxMinute, seed = NULL){
   dfPop = as.data.frame(N_i)
   result = sapply(N_i, generatePointCount,p_1m,maxMinute)
   dfPop$C_i = unlist(result[2,])
