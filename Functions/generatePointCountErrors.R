@@ -13,13 +13,20 @@ generateLatentMatrix = function(dfPointCount,alpha,maxMinute, seed = NULL){
     set.seed(seed)
   
   # get number of individuals at each location 
-  N = dfPointCount %>%
+  dfSummary = dfPointCount %>%
     group_by(locationID)%>%
-    summarise(count = n())
-  N = N$count
+    summarise(count = n(),
+              locationID = max(locationID))
+  N = dfSummary$count
   
   finalDF = matrix(NA,0,0)
-  for(Ni in N){
+  for(row in 1:length(N)){
+    
+    # grab site specific count and store locationID & unique identifier
+    Ni = N[row]
+    locationID = dfSummary[row,]$locationID
+    
+    # begin creating dataframe to store movement
     individuals = 1:Ni
     latent_1 = as.data.frame(individuals)
     
@@ -35,6 +42,8 @@ generateLatentMatrix = function(dfPointCount,alpha,maxMinute, seed = NULL){
       
     }
     result = latent_1
+    result$locationID = locationID
+    result$UniqueIdentifier = paste(result$locationID,result$individuals)
     
     # add to finalDF
     if(nrow(finalDF)==0){
@@ -48,16 +57,14 @@ generateLatentMatrix = function(dfPointCount,alpha,maxMinute, seed = NULL){
   
 }
 
-
-
-
-
-generateErrors = function(dfPointCount,latentMatrix,maxMinute){
+# generate erroneous point count data using latentMatrix
+generateErrors = function(dfPointCount,maxMinute,alpha, seed = NULL){
   
-  
-  
+  latentMatrix = generateLatentMatrix(dfPointCount,alpha,maxMinute,seed)
   
   # handle the cases where latentMatrix is NULL (because population is zero at that location)
+  # actually not needed anymore since I'm using the granular point count data to 
+  # generate errors - but will keep for now. clean up later 
   if(is.null(latentMatrix)){
     finalDF = NULL
   } else {

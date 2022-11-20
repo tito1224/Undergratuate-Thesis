@@ -1,0 +1,75 @@
+---
+title: "Process to Create Errors in Point Count Data"
+author: "Tito"
+date: "2022-11-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Set Variables
+```{r}
+library(tidyverse)
+```
+
+
+```{r}
+source("./Functions/generatePointCount.R")
+source("./Functions/generatePointCountErrors.R")
+```
+
+
+```{r}
+p_1m = 0.6 # needs to be the same p_1m I use to generate summarized count data
+maxMinute = 5
+psi=0.6
+n_locations = 50
+lambda = 15 # get this number from some data?
+alpha = 0.3
+```
+
+
+## Generate Population Data
+```{r}
+set.seed(1)
+locationID = 1:n_locations
+#N_i = rpois(n_locations,lambda)
+N_i = rnbinom(n_locations, mu = lambda, size= 1)
+```
+
+
+```{r}
+# view results
+result = returnData(N_i,p_1m,maxMinute, seed = 1)
+dfRegular_Cumulative = result[[1]]
+dfRegular = result[[2]]
+dfRegular_Summarized = result[[3]]
+
+
+head(dfRegular_Cumulative)
+head(dfRegular)
+head(dfRegular_Summarized)
+```
+
+```{r}
+# for reference so we can see what latent matrix is used to create errors
+latentMatrixUsed = generateLatentMatrix(dfRegular,alpha,maxMinute,1)
+latentMatrixUsed
+```
+Quick examination for location1 -> it seems the functions are working as intended.
+For location 1 there was no movement according to the latent matrix, so new individuals
+were not created. For individual 2 at location 1,it appears splitting happened 
+as intended and so forth.
+```{r}
+dfError = generateErrors(dfRegular,maxMinute,alpha,1)
+head(dfError)
+```
+
+
+
+
+
+
+
