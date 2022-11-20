@@ -133,6 +133,7 @@ dfPop$C_i = unlist(result[2,])
 
 
 ```{r}
+# create unpack point count data and merge into one dataframe
 locationID = 1
 finalDF = matrix(NA,0,0)
 
@@ -195,6 +196,7 @@ dfPop %>%
   labs(title = "Distribution of Site Specific Population Values Against Point Counts",
        subtitle = "Point counts follow a binomial distribution")
 ```
+
 Similar to the probability of detecting an individual at least once
 ```{r}
 mean(dfPop$C_i/dfPop$N_i,na.rm=TRUE)
