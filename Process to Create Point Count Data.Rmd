@@ -127,7 +127,7 @@ generatePointCount = function(Ni,p_1m,maxMinute, seed = NULL){
 
 ## Results for Bin(Ni,p)
 ```{r}
-result = sapply(dfPop$N_i, generatePointCount,p_1m,maxMinute)
+result = sapply(dfPop$N_i, generatePointCount,p_1m,maxMinute) # use seed
 dfPop$C_i = unlist(result[2,])
 ```
 
@@ -236,7 +236,9 @@ CountByTimeInterval = tempdf %>%
   group_by(locationID,TimeInterval) %>%
   mutate(TimeInterval = as.numeric(TimeInterval)) %>%
   summarise(Count = sum(Count > 0), # find number of individuals detected at least once
+            n(),
             p_hat = Count/n())
+CountByTimeInterval
 ```
 
 ```{r}
@@ -246,6 +248,7 @@ summaryPhat = CountByTimeInterval %>%
   summarise(p_data = mean(p_hat))
 summaryPhat$TimeInterval = as.numeric(summaryPhat$TimeInterval)
 summaryPhat$p_theoretical = PredictProbability(summaryPhat$TimeInterval, p_1m)
+summaryPhat
 ```
 
 

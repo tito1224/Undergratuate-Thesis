@@ -206,7 +206,6 @@ returnErrors = function(N_i, p_1m, maxMinute, alpha,seed = NULL){
   ## add some more details to the cumulative counts dataframe
   tempdf$locationID= dfError$locationID
   tempdf$individuals = dfError$individuals
-  tempdf$Detections = rowSums(tempdf[,1:maxMinute])
   
   return(list(tempdf, dfError, dfError_Summarized))
 }
