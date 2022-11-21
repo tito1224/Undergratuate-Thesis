@@ -91,7 +91,6 @@ returnData = function(Ni,p_1m,maxMinute, seed = NULL){
   tempdf$locationID= finalDF$locationID
   tempdf$individuals = finalDF$individuals
   tempdf$UniqueIdentifier = finalDF$UniqueIdentifier
-  tempdf$Detection = rowSums(tempdf[,1:maxMinute])
   
   
   # tempdf shows cumulative sum of counts for the individual
