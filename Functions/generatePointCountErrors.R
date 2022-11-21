@@ -4,6 +4,7 @@
 library(tidyverse)
 library(data.table)
 library(matrixStats)
+source("./Functions/generatePointCount.R")
 
 # create a latent matrix of movements based on incremental point count data
 # doing it based on incremental point count data so that I don't need to worry 
@@ -103,38 +104,63 @@ generateErrors = function(dfPointCount,maxMinute,alpha, seed = NULL){
         # time interval
         for(time in timeMovement){
           
-          # keep old vector values from before movement
-          new_time = numeric(maxMinute)
-          new_time[1:time] = originalHistory[1:time]
-          
-          # add new individual and give them remaining counts
-          new_time_move = numeric(maxMinute)
-          new_time_move[-c(1:time)] = originalHistory[-c(1:time)]
-          
-          # bind the two vectors together
-          tempDF = rbind(new_time, new_time_move)
-          colnames(tempDF) = 1:maxMinute
-          rownames(tempDF) = NULL
-          tempDF = as.data.frame(tempDF)
-          tempDF$individuals = paste0(row,"_",time,letters[1:2])
-          tempDF$locationID = locationID
-          
-          # update originalHistory vector so that it is the vector of the "new" individual
-          originalHistory = new_time_move
-          counter = counter + 1 # update counter 
-          
-          # add case to remove redundant rows
-          if(counter<length(timeMovement)){
-            tempDF = tempDF %>%
-              filter(individuals != paste0(row,"_",time,"b"))
-          }
-          
-          # return two vectors!
-          if(nrow(finalDF)==0){
-            finalDF = tempDF
+          # handle case where the bird is detected only once
+          # doing this because if bird is detected only one time, we can't have an
+          # error where they are double counted -> the only error would a labeling
+          # error and we aren't looking to quantify that right now
+          if(sum(originalHistory[-c(1:time)])<=1){
+            tempDF = as.data.frame(originalHistory)
+            tempDF = t(tempDF)
+            rownames(tempDF) = NULL
+            colnames(tempDF) = 1:maxMinute
+            tempDF = as.data.frame(tempDF)
+            # lack of a letter denotes that a split was indiciated by the latent 
+            # matrix, but would have been a labelling error instead of a double
+            # counting error
+            tempDF$individuals = paste0(row,"_",time) 
+            tempDF$locationID = locationID
+            
+            # return two vectors!
+            if(nrow(finalDF)==0){
+              finalDF = tempDF
+            } else {
+              finalDF = bind_rows(finalDF, tempDF)
+            }
           } else {
-            finalDF = bind_rows(finalDF, tempDF)
+            # keep old vector values from before movement
+            new_time = numeric(maxMinute)
+            new_time[1:time] = originalHistory[1:time]
+            
+            # add new individual and give them remaining counts
+            new_time_move = numeric(maxMinute)
+            new_time_move[-c(1:time)] = originalHistory[-c(1:time)]
+            
+            # bind the two vectors together
+            tempDF = rbind(new_time, new_time_move)
+            colnames(tempDF) = 1:maxMinute
+            rownames(tempDF) = NULL
+            tempDF = as.data.frame(tempDF)
+            tempDF$individuals = paste0(row,"_",time,letters[1:2])
+            tempDF$locationID = locationID
+            
+            # update originalHistory vector so that it is the vector of the "new" individual
+            originalHistory = new_time_move
+            counter = counter + 1 # update counter 
+            
+            # add case to remove redundant rows
+            if(counter<length(timeMovement)){
+              tempDF = tempDF %>%
+                filter(individuals != paste0(row,"_",time,"b"))
+            }
+            
+            # return two vectors!
+            if(nrow(finalDF)==0){
+              finalDF = tempDF
+            } else {
+              finalDF = bind_rows(finalDF, tempDF)
+            }  
           }
+          
         } 
       }
     }
@@ -143,3 +169,44 @@ generateErrors = function(dfPointCount,maxMinute,alpha, seed = NULL){
   # remove duplicated rows 
   return(finalDF)
 }
+
+
+# return cumulative, incremental and summarized erroroneous data
+returnErrors = function(N_i, p_1m, maxMinute, alpha,seed = NULL){
+  # N_i is a vector
+  
+  # generate point count data
+  result = returnData(N_i,p_1m,maxMinute, seed = 1)
+  dfPointCount = result[[2]]
+  dfPointCount_Summarized = result[[3]]
+  dfPointCount_Summarized$locationID = 1:nrow(dfPointCount_Summarized)
+  
+  # generate errors
+  dfError = generateErrors(dfPointCount, maxMinute, alpha,seed)
+  
+  # generate summarized data
+  dfError_Summarized =  dfError %>%
+    group_by(locationID) %>%
+    summarise(C_i_error = n())
+  dfError_Summarized = left_join(dfPointCount_Summarized, dfError_Summarized, by= "locationID")
+  
+  # NAs appear because dfErrors dataframe was generated using point data -> and that 
+  # is only available for individuals that have been detected *at least once*
+  # so I'm just going to do a fill of NA with 0
+  dfError_Summarized[is.na(dfError_Summarized$C_i_error),"C_i_error"]=0
+  
+  # generate cumulative data
+  colsUse = as.character(1:maxMinute)
+  tempdf = as.matrix(dfError[,colsUse])
+  tempdf = rowCumsums(tempdf)
+  tempdf = as.data.frame(tempdf)
+  colnames(tempdf) = colsUse
+  
+  ## add some more details to the cumulative counts dataframe
+  tempdf$locationID= dfError$locationID
+  tempdf$individuals = dfError$individuals
+  
+  return(list(tempdf, dfError, dfError_Summarized))
+}
+
+

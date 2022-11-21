@@ -21,6 +21,9 @@ source("./Functions/generatePointCountErrors.R")
 ```
 
 
+#Q:
+
+How to deal with the case where the bird is only detected once - allow double counting?
 ```{r}
 p_1m = 0.6 # needs to be the same p_1m I use to generate summarized count data
 maxMinute = 5
@@ -46,6 +49,7 @@ result = returnData(N_i,p_1m,maxMinute, seed = 1)
 dfRegular_Cumulative = result[[1]]
 dfRegular = result[[2]]
 dfRegular_Summarized = result[[3]]
+dfRegular_Summarized$locationID = 1:n_locations
 
 
 head(dfRegular_Cumulative)
@@ -58,18 +62,128 @@ head(dfRegular_Summarized)
 latentMatrixUsed = generateLatentMatrix(dfRegular,alpha,maxMinute,1)
 latentMatrixUsed
 ```
-Quick examination for location1 -> it seems the functions are working as intended.
-For location 1 there was no movement according to the latent matrix, so new individuals
-were not created. For individual 2 at location 1,it appears splitting happened 
-as intended and so forth.
+
+I have numbered the individuals so that it is easy to identify where the error came
+from and what the new detection histories mean. 
+
+- If the individual is represented by a single integer, it means there was no 
+movement at all in the latent matrix
+- If the individual is denoted following the form (1_2a or 1_2b - so the form number_number_letter) it means that 
+individual 1 moved immediately after time 2. The a represents the detection history before 
+the split, and the b represents the new individual made after the double counting occurred.
+*I assume each movement = double counting error*
+- If there is an individual with the format 2_3 it means the second individual was
+split at time 3, but because the split would've produced a new (or old) history with 
+all 0's in the detection history, we ignore that split because it would be a labelling
+error instead of a double counting error. 
+  - For example if we look at individual 3, we can see that movement happened after 
+  time 2 and time 4.
+  - the 3_2a represents the detection before the split from the original bird. Ideally, 
+  3_2b is the detection history that is then split upon to create 3_4a and 3_4b. However
+  the split after time 4 would have created a vector of all 0's for individual 
+  3_4b, which means it was technically not detected. So that split would've been
+  a labelling error. That's why I ignore the effects of that split at time 4, and 
+  instead of showing detection histories for 3_2a, 3_4a and 3_4b, I show the detection
+  histories of 3_2a and 3_4 because individual 3_4b would not have been spotted.
+
 ```{r}
 dfError = generateErrors(dfRegular,maxMinute,alpha,1)
+#dfError$Detected = rowSums(dfError[,1:maxMinute])
+head(dfError)
+```
+
+```{r}
+dfError_Summarized =  dfError %>%
+  group_by(locationID) %>%
+  summarise(C_i_error = n())
+dfError_Summarized = left_join(dfRegular_Summarized, dfError_Summarized, by= "locationID")
+head(dfError_Summarized)
+```
+
+
+```{r}
 head(dfError)
 ```
 
 
+# Graphs
+
+Reset parameter values. I changed the p_1m above slightly because I wanted to generate
+enough test cases to see if the way I was creating errors worked. Now that it is, I'll
+go back to using the regular p_1m in order to compare values now to analysis in
+the previous .Rmd about regular point count data.
 
 
+```{r}
+p_1m = 0.1 # needs to be the same p_1m I use to generate summarized count data
+maxMinute = 5
+psi=0.6
+n_locations = 50
+lambda = 15 # get this number from some data?
+alpha = 0.05
+```
+
+
+## Generate Population Data
+```{r}
+set.seed(1)
+locationID = 1:n_locations
+#N_i = rpois(n_locations,lambda)
+N_i = rnbinom(n_locations, mu = lambda, size= 1)
+```
+
+
+```{r}
+# view results
+result = returnData(N_i,p_1m,maxMinute, seed = 1)
+dfRegular_Cumulative = result[[1]]
+dfRegular = result[[2]]
+dfRegular_Summarized = result[[3]]
+dfRegular_Summarized$locationID = 1:n_locations
+
+
+head(dfRegular_Cumulative)
+head(dfRegular)
+head(dfRegular_Summarized)
+```
+
+```{r}
+resultError = returnErrors(N_i, p_1m, maxMinute, alpha,seed = 1)
+
+dfError_cumulative = resultError[[1]] # cumulative counts
+dfError = resultError[[2]] # incremental detections
+dfError_Summarized = resultError[[3]] # summarized data
+
+head(dfError_cumulative)
+head(dfError)
+head(dfError_Summarized)
+```
+
+## Compare Point counts
+
+I will compare the distribution of errors to the population distribution and the 
+distribution of correct counts. 
+
+```{r}
+dfError_Summarized%>%
+  pivot_longer(cols= c("N_i","C_i","C_i_error"),names_to = "Type", values_to= "Values")%>%
+  ggplot()+
+  geom_density(aes(x=Values, color= Type))+
+  theme_minimal()+ 
+  labs(title= "Distribution of Population, Point Counts, and Erroneous Point Counts")
+```
+
+
+Facet for easier comparison 
+```{r}
+dfError_Summarized%>%
+  pivot_longer(cols= c("N_i","C_i","C_i_error"),names_to = "Type", values_to= "Values")%>%
+  ggplot()+
+  geom_density(aes(x=Values, fill= Type))+
+  facet_wrap(~Type)+
+  theme_minimal()+ 
+  labs(title= "Distribution of Population, Point Counts, and Erroneous Point Counts")
+```
 
 
 
