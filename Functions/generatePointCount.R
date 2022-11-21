@@ -20,10 +20,10 @@ PredictProbability = function(m, p1m){
 
 
 # generating point counts ci ~ Bin(Ni,p)
-generatePointCount = function(Ni,p_1m,maxMinute, seed = NULL){
+generatePointCount = function(Ni,p_1m,maxMinute){
   
-  if(!is.null(seed))
-    set.seed(seed)
+  # if(!is.null(seed))
+  #   set.seed(seed)
   
   if(Ni == 0){
     result <- list(NULL, 0)
@@ -52,7 +52,10 @@ generatePointCount = function(Ni,p_1m,maxMinute, seed = NULL){
 # return point count data in incremental, cumulative, and summarized formats
 returnData = function(Ni,p_1m,maxMinute, seed = NULL){
   dfPop = as.data.frame(N_i)
-  result = sapply(N_i, generatePointCount,p_1m,maxMinute,seed)
+  
+  if(!is.null(seed))
+    set.seed(seed)
+  result = sapply(N_i, generatePointCount,p_1m,maxMinute)
   dfPop$C_i = unlist(result[2,])
   
   # create unpack point count data and merge into one dataframe
@@ -88,7 +91,7 @@ returnData = function(Ni,p_1m,maxMinute, seed = NULL){
   tempdf$locationID= finalDF$locationID
   tempdf$individuals = finalDF$individuals
   tempdf$UniqueIdentifier = finalDF$UniqueIdentifier
-  tempdf$Detection = ifelse(rowSums(tempdf[,1:maxMinute])>0,1,0)
+  tempdf$Detection = rowSums(tempdf[,1:maxMinute])
   
   
   # tempdf shows cumulative sum of counts for the individual
