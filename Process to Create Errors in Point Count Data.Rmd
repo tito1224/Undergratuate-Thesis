@@ -116,7 +116,7 @@ the previous .Rmd about regular point count data.
 
 ```{r}
 p_1m = 0.1 # what was used in the previous .Rmd file
-maxMinute = 5
+maxMinute = 10
 psi=0.6
 n_locations = 50
 lambda = 15 # get this number from some data?
@@ -125,6 +125,7 @@ alpha = 0.3
 
 
 ## Generate Population Data
+
 ```{r}
 set.seed(1)
 locationID = 1:n_locations
@@ -175,8 +176,8 @@ dfError_Summarized%>%
 ```
 
 
-Facet for easier comparison. Looks like erroneous point count data is still somewhat
-similar to the distribution of C_i, but the density at certain points is lower. The 
+Facet for easier comparison. Looks like erroneous point count data is somewhat
+similar to the distribution of N_i, but the density at certain points is lower. The 
 next step is to generate distributions for various values of alpha - this is a good 
 way to check that error mechanism is working since alpha = 0 should give me the same
 distribution as C_i.
@@ -231,6 +232,7 @@ and the median seems to shift as well. Maybe a boxplot to illustrate would help.
 ```{r}
 dfAlpha%>%
   pivot_longer(cols= everything() ,names_to = "Type", values_to= "Values")%>%
+  filter(Type != "N_i")%>%
   ggplot()+
   geom_density(aes(x=Values, color= Type))+
   theme_minimal()+ 
@@ -249,6 +251,64 @@ dfAlpha%>%
   theme(axis.text.x = element_blank())
 ```
 
+## Probability of Detection 
 
+I want to see how the theoretical probability of detection compares against the detection
+probability implied by the data. Obviously as probability of an error increases, 
+we will see an implied detection probability > 1.
+
+
+Find the implied p_hat of the erroneous data.
+```{r}
+dfError_cumulative = left_join(dfError_cumulative,dfError_Summarized[,c("N_i","locationID")],
+                               by = "locationID")
+colsUse = as.character(1:maxMinute)
+CountByTimeInterval = dfError_cumulative %>%
+  pivot_longer(cols = c(colsUse), names_to = "TimeInterval", values_to = "Count")%>%
+  group_by(locationID,TimeInterval) %>%
+  mutate(TimeInterval = as.numeric(TimeInterval)) %>%
+  summarise(Count = sum(Count > 0), # find number of individuals detected at least once
+            p_hat = Count/N_i)
+```
+
+```{r}
+# find theoretical probability of being detected at least once for erroneous data
+summaryPhat = CountByTimeInterval %>%
+  group_by(TimeInterval)%>%
+  summarise(p_data_error = mean(p_hat))
+summaryPhat$TimeInterval = as.numeric(summaryPhat$TimeInterval)
+summaryPhat$p_theoretical = PredictProbability(summaryPhat$TimeInterval, p_1m)
+```
+
+```{r}
+# find theoretical probability of being detected at least once for regular data
+dfRegular_Cumulative = left_join(dfRegular_Cumulative,dfRegular_Summarized[,c("N_i","locationID")],
+                               by = "locationID")
+colsUse = as.character(1:maxMinute)
+CountByTimeInterval = dfRegular_Cumulative %>%
+  pivot_longer(cols = c(colsUse), names_to = "TimeInterval", values_to = "Count")%>%
+  group_by(locationID,TimeInterval) %>%
+  mutate(TimeInterval = as.numeric(TimeInterval)) %>%
+  summarise(Count = sum(Count > 0), # find number of individuals detected at least once
+            p_hat = Count/N_i)
+
+
+summaryRegularPHat = CountByTimeInterval %>%
+  group_by(TimeInterval)%>%
+  summarise(p_data_reg = mean(p_hat))
+
+summaryPhat$p_data_reg = summaryRegularPHat$p_data_reg
+```
+
+```{r}
+summaryPhat %>%
+  pivot_longer(cols=c("p_data_error","p_data_reg","p_theoretical"),names_to = "Type",values_to = "p" )%>%
+ggplot()+
+  geom_point(aes(x=TimeInterval, y = p,color=Type))+ 
+  geom_line(aes(x=TimeInterval, y = p,color= Type))+
+  theme_minimal()+ 
+  labs(title = "Comparison of Estimated Detection Probability and Theoretical Probability",
+       subtitle = "Theoretical probability is the probability of being detected at least once.")
+```
 
 
