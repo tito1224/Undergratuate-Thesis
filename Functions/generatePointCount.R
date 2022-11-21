@@ -52,7 +52,7 @@ generatePointCount = function(Ni,p_1m,maxMinute, seed = NULL){
 # return point count data in incremental, cumulative, and summarized formats
 returnData = function(Ni,p_1m,maxMinute, seed = NULL){
   dfPop = as.data.frame(N_i)
-  result = sapply(N_i, generatePointCount,p_1m,maxMinute)
+  result = sapply(N_i, generatePointCount,p_1m,maxMinute,seed)
   dfPop$C_i = unlist(result[2,])
   
   # create unpack point count data and merge into one dataframe
