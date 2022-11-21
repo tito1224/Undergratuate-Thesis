@@ -176,7 +176,7 @@ returnErrors = function(N_i, p_1m, maxMinute, alpha,seed = NULL){
   # N_i is a vector
   
   # generate point count data
-  result = returnData(N_i,p_1m,maxMinute, seed = 1)
+  result = returnData(N_i,p_1m,maxMinute, seed = seed)
   dfPointCount = result[[2]]
   dfPointCount_Summarized = result[[3]]
   dfPointCount_Summarized$locationID = 1:nrow(dfPointCount_Summarized)
@@ -185,9 +185,10 @@ returnErrors = function(N_i, p_1m, maxMinute, alpha,seed = NULL){
   dfError = generateErrors(dfPointCount, maxMinute, alpha,seed)
   
   # generate summarized data
+  dfError$Detection = ifelse(rowSums(dfError[,1:maxMinute])>0,1,0)
   dfError_Summarized =  dfError %>%
     group_by(locationID) %>%
-    summarise(C_i_error = n())
+    summarise(C_i_error = sum(Detection))
   dfError_Summarized = left_join(dfPointCount_Summarized, dfError_Summarized, by= "locationID")
   
   # NAs appear because dfErrors dataframe was generated using point data -> and that 

@@ -115,12 +115,12 @@ the previous .Rmd about regular point count data.
 
 
 ```{r}
-p_1m = 0.1 # needs to be the same p_1m I use to generate summarized count data
+p_1m = 0.1 # what was used in the previous .Rmd file
 maxMinute = 5
 psi=0.6
 n_locations = 50
 lambda = 15 # get this number from some data?
-alpha = 0.05
+alpha = 0.3
 ```
 
 
@@ -146,6 +146,7 @@ head(dfRegular_Cumulative)
 head(dfRegular)
 head(dfRegular_Summarized)
 ```
+
 
 ```{r}
 resultError = returnErrors(N_i, p_1m, maxMinute, alpha,seed = 1)
@@ -174,7 +175,11 @@ dfError_Summarized%>%
 ```
 
 
-Facet for easier comparison 
+Facet for easier comparison. Looks like erroneous point count data is still somewhat
+similar to the distribution of C_i, but the density at certain points is lower. The 
+next step is to generate distributions for various values of alpha - this is a good 
+way to check that error mechanism is working since alpha = 0 should give me the same
+distribution as C_i.
 ```{r}
 dfError_Summarized%>%
   pivot_longer(cols= c("N_i","C_i","C_i_error"),names_to = "Type", values_to= "Values")%>%
@@ -184,6 +189,66 @@ dfError_Summarized%>%
   theme_minimal()+ 
   labs(title= "Distribution of Population, Point Counts, and Erroneous Point Counts")
 ```
+
+
+A list of alpha values are generated and the result of C_i error are shown for each 
+value of alpha.
+```{r}
+lstAlpha = c(0,0.3,0.5,0.7,0.9)
+dfAlpha = data.frame(N_i= N_i,
+                     C_i= dfRegular_Summarized$C_i)
+
+# loop to create new C_i_errors based on alpha
+for(alpha in lstAlpha){
+  resultError = returnErrors(N_i, p_1m, maxMinute, alpha,seed = 1)
+  dfError_Summarized = resultError[[3]] # summarized data
+  
+  newColName = paste0("C_i_error_alpha_",alpha)
+  dfAlpha[,newColName] = dfError_Summarized$C_i_error
+}
+```
+
+
+```{r}
+head(dfAlpha)
+```
+
+Need to zoom in to see image properly, but graphs right to me. Ci and C_i_error_alpha_0
+have the same distribution (as it should be). We can see that as the probability of errors
+increases, the distribution has a flatter peak and looks a bit more similar 
+```{r}
+dfAlpha%>%
+  pivot_longer(cols= everything() ,names_to = "Type", values_to= "Values")%>%
+  ggplot()+
+  geom_density(aes(x=Values, fill= Type))+
+  facet_wrap(~Type)+
+  theme_minimal()+ 
+  labs(title= "Distribution of Population, Point Counts, and Erroneous Point Counts")
+```
+
+Looking at it unfaceted is interesting because you can see how the peak becomes smaller
+and the median seems to shift as well. Maybe a boxplot to illustrate would help.
+```{r}
+dfAlpha%>%
+  pivot_longer(cols= everything() ,names_to = "Type", values_to= "Values")%>%
+  ggplot()+
+  geom_density(aes(x=Values, color= Type))+
+  theme_minimal()+ 
+  labs(title= "Distribution of Population, Point Counts, and Erroneous Point Counts")
+```
+I think boxplot highlights this well - we see the shifting median and increasing 
+outliers as alpha rises in value.
+```{r}
+dfAlpha%>%
+  pivot_longer(cols= everything() ,names_to = "Type", values_to= "Values")%>%
+  filter(Type != "C_i_error_alpha_0")%>%
+  ggplot()+
+  geom_boxplot(aes(x=Type,y=Values, color= Type))+
+  theme_minimal()+ 
+  labs(title= "Distribution of Population, Point Counts, and Erroneous Point Counts")+
+  theme(axis.text.x = element_blank())
+```
+
 
 
 
