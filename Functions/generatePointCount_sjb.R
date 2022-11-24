@@ -41,6 +41,22 @@ generateMovement <- function(pcData, alpha){
   pcData <- pcData %>%
     mutate(Move = (Minute > 1) * rbinom(n(), 1, alpha))
   
+
+}
+
+splitDetects <- function(pcData){
+  ## Identify split histories for each individual
+  pcData <- pcData %>%
+    group_by(locationID, individual) %>%
+    mutate(Split = cumsum(Move) + 1) %>%
+    ungroup()
+  
+  ## Split histories and fill remaining values with 0s
+  pcData <- pcData %>%
+    mutate(individual = paste0(individual,"_",Split)) %>%
+    select(-Move, -Split) %>%
+    complete(locationID, individual, Minute, fill = list(Detect = 0))
+  
   pcData
 }
 
