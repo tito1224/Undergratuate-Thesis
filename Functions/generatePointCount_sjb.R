@@ -1,5 +1,9 @@
 generateDetects <- function(Ni,p_1m,maxMinute, seed = NULL){
   
+  ## Set seed
+  if (!is.null(seed))
+    set.seed(seed)
+  
   ## Initialize data frame with location, individual, and occasion
   ## Locations with no individuals are removed
   pcData <- tibble(locationID = 1:length(Ni),
@@ -38,7 +42,11 @@ detectsToCapHist <- function(pcData, keepZeros = FALSE){
   chData
 }
 
-generateMovement <- function(pcData, alpha){
+generateMovement <- function(pcData, alpha, seed = NULL){
+  
+  ## Set seed
+  if (!is.null(seed))
+    set.seed(seed)
   
   ## Simulate movements
   pcData <- pcData %>%
@@ -58,7 +66,7 @@ splitDetects <- function(pcData){
   pcData <- pcData %>%
     mutate(individual = paste0(individual,"_",Split)) %>%
     select(-Move, -Split) %>%
-    complete(locationID, individual, Minute, fill = list(Detect = 0))
+    complete(nesting(locationID, individual), Minute, fill = list(Detect = 0))
   
   pcData
 }
