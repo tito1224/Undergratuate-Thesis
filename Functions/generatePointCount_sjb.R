@@ -1,9 +1,12 @@
 generateDetects <- function(Ni,p_1m,maxMinute, seed = NULL){
   
   ## Initialize data frame with location, individual, and occasion
-  pcData <- tibble(locationID = 1:length(Ni)) %>%
+  ## Locations with no individuals are removed
+  pcData <- tibble(locationID = 1:length(Ni),
+                   N = Ni) %>%
+    filter(N > 0) %>%
     group_by(locationID) %>%
-    summarize(individual = 1:Ni[locationID], .groups = "drop") %>%
+    summarize(individual = 1:N, .groups = "drop") %>%
     crossing(Minute = 1:maxMinute)
   
   ## Simulate detections
