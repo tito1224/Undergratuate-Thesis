@@ -1,4 +1,4 @@
-generatePointCount <- function(Ni,p_1m,maxMinute, seed = NULL){
+generateDetects <- function(Ni,p_1m,maxMinute, seed = NULL){
   
   ## Initialize data frame with location, individual, and occasion
   pc_data <- tibble(locationID = 1:length(Ni)) %>%
