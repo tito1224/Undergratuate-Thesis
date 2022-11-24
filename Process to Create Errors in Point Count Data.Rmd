@@ -58,8 +58,26 @@ head(dfRegular_Summarized)
 ```
 
 ```{r}
+generateLatentMatrix_sjb <- function(dfRegular,alpha,maxMinute,seed = NULL){
+  
+  # Set seed for reproducibility
+  if(!is.null(seed))
+    set.seed(seed)
+  
+  # Simulate movements
+  movements <- rbinom(nrow(dfRegular) * (maxMinute - 1), 1, alpha) %>%
+    matrix(nrow = nrow(dfRegular)) 
+  colnames(movements) <- 1:(maxMinute - 1) 
+  
+  # Add individual and location identifiers
+  movements <- dfRegular %>%
+    select(individuals, locationID, UniqueIdentifier) %>%
+    bind_cols(movements)
+  
+}
+
 # for reference so we can see what latent matrix is used to create errors
-latentMatrixUsed = generateLatentMatrix(dfRegular,alpha,maxMinute,1)
+latentMatrixUsed = generateLatentMatrix_sjb(dfRegular,alpha,maxMinute,1)
 latentMatrixUsed
 ```
 
