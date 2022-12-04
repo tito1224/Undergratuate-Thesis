@@ -12,25 +12,19 @@ knitr::opts_chunk$set(echo = TRUE)
 ## Set Variables
 ```{r}
 library(tidyverse)
-```
-
-
-```{r}
+library(data.table)
+library(matrixStats)
 source("./Functions/generatePointCount.R")
-source("./Functions/generatePointCountErrors.R")
 ```
 
 
-#Q:
-
-How to deal with the case where the bird is only detected once - allow double counting?
 ```{r}
-p_1m = 0.6 # needs to be the same p_1m I use to generate summarized count data
-maxMinute = 5
-psi=0.6
+p_1m = 0.1  
+maxMinute = 10
+colsUse = paste0("Minute",1:maxMinute)
 n_locations = 50
 lambda = 15 # get this number from some data?
-alpha = 0.3
+alpha=0.3
 ```
 
 
@@ -40,129 +34,85 @@ set.seed(1)
 locationID = 1:n_locations
 #N_i = rpois(n_locations,lambda)
 N_i = rnbinom(n_locations, mu = lambda, size= 1)
+dfPop = as.data.frame(cbind(locationID, N_i))
 ```
 
 
 ```{r}
+# generate counts
+dfCount = generateDetects(dfPop$N_i, p_1m,maxMinute,10)
+
+# show data in wide format
+dfWide = detectsToCapHist(dfCount)
+dfWide = left_join(dfWide, dfPop, by = "locationID")
+
+# add summarised count data
+dfPop = left_join(dfPop, formatData(dfCount, isSummarised = TRUE), by = "locationID")
+dfPop$C_i = replace_na(dfPop$C_i,0) # fill NA
+
+# show cumulative data
+dfCumulative = formatData(dfCount, isCumulative = TRUE)
+dfCumulative = left_join(dfCumulative, dfPop[,c("locationID","N_i")], by = "locationID")
+
+
+# view
+head(dfCount)
+head(dfWide)
+head(dfPop)
+head(dfCumulative)
+```
+
+
+- with respect to dfMove, the 1 represents if movement happened before the current
+minute (m) and after the previous minute (m-1)
+- If the individual is represented by a number and _1 in dfError, 
+it means there was no movement at all in the latent matrix at a period when the original 
+individual was observed (so even if movement happened, we did not count the bird
+and so cannot say it was double counted)
+
+*We assume each movement = double counting error*
+```{r}
+dfMove = generateMovement(dfCount,alpha,1) # generate movement
+dfSplit = splitDetects(dfMove) # generate splits
+dfError = generateErrors(dfCount,alpha,1) # combined function
+
 # view results
-result = returnData(N_i,p_1m,maxMinute, seed = 1)
-dfRegular_Cumulative = result[[1]]
-dfRegular = result[[2]]
-dfRegular_Summarized = result[[3]]
-dfRegular_Summarized$locationID = 1:n_locations
-
-
-head(dfRegular_Cumulative)
-head(dfRegular)
-head(dfRegular_Summarized)
+print(dfMove[dfMove$locationID==29,])
+print(dfError[dfError$locationID==29,])
 ```
 
-```{r}
-# for reference so we can see what latent matrix is used to create errors
-latentMatrixUsed = generateLatentMatrix(dfRegular,alpha,maxMinute,1)
-latentMatrixUsed
-```
-
-I have numbered the individuals so that it is easy to identify where the error came
-from and what the new detection histories mean. 
-
-- If the individual is represented by a single integer, it means there was no 
-movement at all in the latent matrix
-- If the individual is denoted following the form (1_2a or 1_2b - so the form number_number_letter) it means that 
-individual 1 moved immediately after time 2. The a represents the detection history before 
-the split, and the b represents the new individual made after the double counting occurred.
-*I assume each movement = double counting error*
-- If there is an individual with the format 2_3 it means the second individual was
-split at time 3, but because the split would've produced a new (or old) history with 
-all 0's in the detection history, we ignore that split because it would be a labelling
-error instead of a double counting error. 
-  - For example if we look at individual 3, we can see that movement happened after 
-  time 2 and time 4.
-  - the 3_2a represents the detection before the split from the original bird. Ideally, 
-  3_2b is the detection history that is then split upon to create 3_4a and 3_4b. However
-  the split after time 4 would have created a vector of all 0's for individual 
-  3_4b, which means it was technically not detected. So that split would've been
-  a labelling error. That's why I ignore the effects of that split at time 4, and 
-  instead of showing detection histories for 3_2a, 3_4a and 3_4b, I show the detection
-  histories of 3_2a and 3_4 because individual 3_4b would not have been spotted.
 
 ```{r}
-dfError = generateErrors(dfRegular,maxMinute,alpha,1)
-#dfError$Detected = rowSums(dfError[,1:maxMinute])
+# add summarised erronous data to dfPop
+dfErrorSummarised = formatData(dfError, isSummarised = TRUE)%>%
+  rename(C_i_error = C_i)
+dfPop = left_join(dfPop, dfErrorSummarised, by = "locationID")
+dfPop$C_i_error = replace_na(dfPop$C_i_error,0) # fill NA
+
+# find erronous cumulative data
+dfErrorCumulative = formatData(dfError, isCumulative = TRUE)
+dfErrorCumulative = left_join(dfErrorCumulative, dfPop[,c("locationID","N_i")], by = "locationID")
+
+
+# view
 head(dfError)
+head(dfPop)
+head(dfErrorCumulative)
 ```
-
-```{r}
-dfError_Summarized =  dfError %>%
-  group_by(locationID) %>%
-  summarise(C_i_error = n())
-dfError_Summarized = left_join(dfRegular_Summarized, dfError_Summarized, by= "locationID")
-head(dfError_Summarized)
-```
-
 
 # Graphs
-
-Reset parameter values. I changed the p_1m above slightly because I wanted to generate
-enough test cases to see if the way I was creating errors worked. Now that it is, I'll
-go back to using the regular p_1m in order to compare values now to analysis in
-the previous .Rmd about regular point count data.
-
-
-```{r}
-p_1m = 0.1 # what was used in the previous .Rmd file
-maxMinute = 10
-psi=0.6
-n_locations = 50
-lambda = 15 # get this number from some data?
-alpha = 0.3
-```
-
-
-## Generate Population Data
-
-```{r}
-set.seed(1)
-locationID = 1:n_locations
-#N_i = rpois(n_locations,lambda)
-N_i = rnbinom(n_locations, mu = lambda, size= 1)
-```
-
-
-```{r}
-# view results
-result = returnData(N_i,p_1m,maxMinute, seed = 1)
-dfRegular_Cumulative = result[[1]]
-dfRegular = result[[2]]
-dfRegular_Summarized = result[[3]]
-dfRegular_Summarized$locationID = 1:n_locations
-
-
-head(dfRegular_Cumulative)
-head(dfRegular)
-head(dfRegular_Summarized)
-```
-
-
-```{r}
-resultError = returnErrors(N_i, p_1m, maxMinute, alpha,seed = 1)
-
-dfError_cumulative = resultError[[1]] # cumulative counts
-dfError = resultError[[2]] # incremental detections
-dfError_Summarized = resultError[[3]] # summarized data
-
-head(dfError_cumulative)
-head(dfError)
-head(dfError_Summarized)
-```
 
 ## Compare Overall Distribution
 
 I will compare the distribution of errors to the population distribution and the 
 distribution of correct counts. 
 
+
+Distribution of C_i error is radically different from C_i -> almost looks closer to 
+distribution of N_i. Would make sense as we're counting extra individuals and that 
+means C_i_error avg will be closer to that of N_i avg.
 ```{r}
-dfError_Summarized%>%
+dfPop%>%
   pivot_longer(cols= c("N_i","C_i","C_i_error"),names_to = "Type", values_to= "Values")%>%
   ggplot()+
   geom_density(aes(x=Values, color= Type))+
@@ -170,14 +120,13 @@ dfError_Summarized%>%
   labs(title= "Distribution of Population, Point Counts, and Erroneous Point Counts")
 ```
 
-
 Facet for easier comparison. Looks like erroneous point count data is somewhat
-similar to the distribution of N_i, but the density at certain points is lower. The 
+similar to the distribution of N_i, but the density at certain points is different. The 
 next step is to generate distributions for various values of alpha - this is a good 
 way to check that error mechanism is working since alpha = 0 should give me the same
 distribution as C_i.
 ```{r}
-dfError_Summarized%>%
+dfPop%>%
   pivot_longer(cols= c("N_i","C_i","C_i_error"),names_to = "Type", values_to= "Values")%>%
   ggplot()+
   geom_density(aes(x=Values, fill= Type))+
@@ -193,8 +142,7 @@ detection error means that counts that should be attributed to one individual ar
 given to a new individual instead. So instead of an individual being counted 4 times 
 they might be counted 1 or 2 times instead.
 ```{r}
-colsUse = as.character(1:maxMinute)
-dfError_cumulative%>%
+dfErrorCumulative%>%
   pivot_longer(cols = c(colsUse), names_to = "Time", values_to = "Count")%>%
 ggplot()+ 
   geom_density(aes(x=Count, fill = Time, color = Time),alpha=0.6)+ 
@@ -204,7 +152,7 @@ ggplot()+
 ```
 
 ```{r}
-dfRegular_Cumulative%>%
+dfCumulative%>%
   pivot_longer(cols = c(colsUse), names_to = "Time", values_to = "Count")%>%
 ggplot()+ 
   geom_density(aes(x=Count, fill = Time, color = Time),alpha=0.6)+ 
@@ -217,16 +165,19 @@ A list of alpha values are generated and the result of C_i error are shown for e
 value of alpha.
 ```{r}
 lstAlpha = c(0,0.3,0.5,0.7,0.9)
-dfAlpha = data.frame(N_i= N_i,
-                     C_i= dfRegular_Summarized$C_i)
+dfAlpha = copy(dfPop[,c("locationID","N_i","C_i")])
 
 # loop to create new C_i_errors based on alpha
 for(alpha in lstAlpha){
-  resultError = returnErrors(N_i, p_1m, maxMinute, alpha,seed = 1)
-  dfError_Summarized = resultError[[3]] # summarized data
+  dfErrorTemp = generateErrors(dfCount,alpha,1)
   
+  # add summarised erronous data to dfPop
+  dfErrorTempSummarised = formatData(dfErrorTemp, isSummarised = TRUE)
   newColName = paste0("C_i_error_alpha_",alpha)
-  dfAlpha[,newColName] = dfError_Summarized$C_i_error
+  colnames(dfErrorTempSummarised) =c("locationID",newColName)
+  
+  dfAlpha = left_join(dfAlpha, dfErrorTempSummarised, by = "locationID")
+  dfAlpha[,newColName] = replace_na(dfAlpha[,newColName],0) # fill NA
 }
 ```
 
@@ -235,12 +186,13 @@ for(alpha in lstAlpha){
 head(dfAlpha)
 ```
 
-Need to zoom in to see image properly, but graphs right to me. Ci and C_i_error_alpha_0
+Need to zoom in to see image properly, but graphs look right to me. Ci and C_i_error_alpha_0
 have the same distribution (as it should be). We can see that as the probability of errors
 increases, the distribution has a flatter peak and looks a bit more similar 
 ```{r}
 dfAlpha%>%
   pivot_longer(cols= everything() ,names_to = "Type", values_to= "Values")%>%
+  filter(Type !="locationID")%>%
   ggplot()+
   geom_density(aes(x=Values, fill= Type))+
   facet_wrap(~Type)+
@@ -253,18 +205,20 @@ and the median seems to shift as well. Maybe a boxplot to illustrate would help.
 ```{r}
 dfAlpha%>%
   pivot_longer(cols= everything() ,names_to = "Type", values_to= "Values")%>%
-  filter(Type != "N_i")%>%
+  filter(!(Type %in% c("N_i","locationID")))%>%
   ggplot()+
   geom_density(aes(x=Values, color= Type))+
   theme_minimal()+ 
   labs(title= "Distribution of Population, Point Counts, and Erroneous Point Counts")
 ```
+
+
 I think boxplot highlights this well - we see the shifting median and increasing 
 outliers as alpha rises in value.
 ```{r}
 dfAlpha%>%
   pivot_longer(cols= everything() ,names_to = "Type", values_to= "Values")%>%
-  filter(Type != "C_i_error_alpha_0")%>%
+  filter(!(Type %in% c("C_i_error_alpha_0","locationID")))%>%
   ggplot()+
   geom_boxplot(aes(x=Type,y=Values, color= Type))+
   theme_minimal()+ 
@@ -276,58 +230,75 @@ dfAlpha%>%
 
 ## Probability of Detection 
 
-I want to see how the theoretical probability of detection compares against the detection
-probability implied by the data. Obviously as probability of an error increases, 
-we will see an implied detection probability > 1.
 
 ```{r}
-dfError_cumulative_location = left_join(dfError_cumulative,dfError_Summarized[,c("N_i","locationID")],
-                               by = "locationID")
-colsUse = as.character(1:maxMinute)
-CountByTimeInterval_e = dfError_cumulative_location %>%
-  pivot_longer(cols = c(colsUse), names_to = "TimeInterval", values_to = "Count")%>%
-  group_by(locationID,TimeInterval) %>%
-  mutate(TimeInterval = as.numeric(TimeInterval)) %>%
-  summarise(Count = sum(Count>0), # find number of individuals detected at least once
-            p_hat = Count/N_i)
+CountByTimeInterval=dfCumulative %>%
+  pivot_longer(cols = c(colsUse), names_to = "TimeInterval", values_to = "PointCount")%>%
+  group_by(locationID, individual, TimeInterval)%>%
+  summarise(TotalCount = sum(PointCount))
+
+CountByTimeInterval$TotalCount= ifelse(CountByTimeInterval$TotalCount>=1,1,0)
+CountByTimeInterval=CountByTimeInterval %>%
+  group_by(locationID, TimeInterval)%>%
+  summarise(FinalCount = sum(TotalCount))
+# add total location population
+CountByTimeInterval = left_join(CountByTimeInterval, dfPop, by = "locationID")
+tail(CountByTimeInterval)
+
+
+CountByTimeIntervalError=dfErrorCumulative %>%
+  pivot_longer(cols = c(colsUse), names_to = "TimeInterval", values_to = "PointCount")%>%
+  group_by(locationID, individual, TimeInterval)%>%
+  summarise(TotalCount = sum(PointCount))
+
+CountByTimeIntervalError$TotalCount= ifelse(CountByTimeIntervalError$TotalCount>=1,1,0)
+CountByTimeIntervalError=CountByTimeIntervalError %>%
+  group_by(locationID, TimeInterval)%>%
+  summarise(FinalCount = sum(TotalCount))
+# add total location population
+CountByTimeIntervalError = left_join(CountByTimeIntervalError, dfPop, by = "locationID")
+tail(CountByTimeIntervalError)
+
 ```
 
+Find the implied p_hat of the data. 
 ```{r}
-# find theoretical probability of being detected at least once for erroneous data
-summaryPhat = CountByTimeInterval_e %>%
+CountByTimeInterval = CountByTimeInterval %>%
+  mutate(p_hat = FinalCount/N_i)
+CountByTimeInterval$TimeInterval = as.numeric(gsub('Minute', '', CountByTimeInterval$TimeInterval))
+head(CountByTimeInterval)
+
+
+CountByTimeIntervalError = CountByTimeIntervalError %>%
+  mutate(p_hat = FinalCount/N_i)
+CountByTimeIntervalError$TimeInterval = as.numeric(gsub('Minute', '', CountByTimeIntervalError$TimeInterval))
+head(CountByTimeIntervalError)
+```
+
+
+```{r}
+# find theoretical probability of being detected at least once
+summaryPhat = CountByTimeInterval %>%
   group_by(TimeInterval)%>%
-  summarise(p_data_error = mean(p_hat))
+  summarise(p_data = mean(p_hat))
 summaryPhat$TimeInterval = as.numeric(summaryPhat$TimeInterval)
 summaryPhat$p_theoretical = PredictProbability(summaryPhat$TimeInterval, p_1m)
+
+
+summaryPhatError = CountByTimeIntervalError %>%
+  group_by(TimeInterval)%>%
+  summarise(p_data = mean(p_hat))
+summaryPhatError$TimeInterval = as.numeric(summaryPhatError$TimeInterval)
+summaryPhat$p_error = summaryPhatError$p_data
+
+head(summaryPhat)
 ```
 
-```{r}
-# find theoretical probability of being detected at least once for regular data
-dfRegular_Cumulative_location = left_join(dfRegular_Cumulative,dfRegular_Summarized[,c("N_i","locationID")],
-                               by = "locationID")
-colsUse = as.character(1:maxMinute)
-CountByTimeInterval_r = dfRegular_Cumulative_location %>%
-  pivot_longer(cols = c(colsUse), names_to = "TimeInterval", values_to = "Count")%>%
-  group_by(locationID,TimeInterval) %>%
-  mutate(TimeInterval = as.numeric(TimeInterval)) %>%
-  summarise(Count = sum(Count > 0), # find number of individuals detected at least once
-            n(),
-            p_hat = Count/N_i)
-
-CountByTimeInterval_r
-summaryRegularPHat = CountByTimeInterval_r %>%
- group_by(TimeInterval)%>%
-  summarise(p_data_reg = mean(p_hat))
-summaryRegularPHat
-
-summaryPhat$p_data_reg = summaryRegularPHat$p_data_reg
-```
 
 
 ```{r}
 summaryPhat %>%
-  pivot_longer(cols=c("p_data_error","p_data_reg","p_theoretical"),names_to = "Type",values_to = "p" )%>%
-  filter(Type!="p_data_error")%>%
+  pivot_longer(cols=c("p_data","p_error","p_theoretical"),names_to = "Type",values_to = "p" )%>%
 ggplot()+
   geom_point(aes(x=TimeInterval, y = p,color=Type))+ 
   geom_line(aes(x=TimeInterval, y = p,color= Type))+
@@ -336,17 +307,3 @@ ggplot()+
        subtitle = "Theoretical probability is the probability of being detected at least once.")
 ```
 
-
-
-
-
-```{r}
-summaryPhat %>%
-  pivot_longer(cols=c("p_data_error","p_data_reg","p_theoretical"),names_to = "Type",values_to = "p" )%>%
-ggplot()+
-  geom_point(aes(x=TimeInterval, y = p,color=Type))+ 
-  geom_line(aes(x=TimeInterval, y = p,color= Type))+
-  theme_minimal()+ 
-  labs(title = "Comparison of Estimated Detection Probability and Theoretical Probability",
-       subtitle = "Theoretical probability is the probability of being detected at least once.")
-```

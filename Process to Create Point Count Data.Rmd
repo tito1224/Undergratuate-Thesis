@@ -21,7 +21,7 @@ source("./Functions/generatePointCount.R")
 
 ## Set Variables
 ```{r}
-p_1m = 0.1 
+p_1m = 0.3
 maxMinute = 10
 colsUse = paste0("Minute",1:maxMinute)
 n_locations = 50
@@ -61,6 +61,7 @@ head(dfWide)
 Add summarized data and view cumulative data
 ```{r}
 dfPop = left_join(dfPop, formatData(dfCount, isSummarised = TRUE), by = "locationID")
+dfPop$C_i = replace_na(dfPop$C_i,0) # fill NA that occurs when N_i is 0
 head(dfPop)
 ```
 
