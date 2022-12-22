@@ -21,7 +21,7 @@ source("./Functions/generatePointCount.R")
 
 ## Set Variables
 ```{r}
-p_1m = 0.3
+p_1m = 0.1
 maxMinute = 10
 colsUse = paste0("Minute",1:maxMinute)
 n_locations = 50

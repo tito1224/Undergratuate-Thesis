@@ -1,0 +1,28 @@
+---
+title: "Next Steps"
+author: "Tito"
+date: "2022-12-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+- Have the simulation process down --> any resources to grab numbers for 
+reasonable population param values? 
+- How many data points (ie sites) would be reasonable to simulate?
+- Need alpha (prob of making an error) and p_1m prob of detection --> will I be running
+the same simulation over various values of alpha & p_1m? Not sure how to get reasonable
+numbers for this
+- program MARK?
+- if program MARK is being used what type of M model am I fitting?
+  - right now the way the data is simulated is to assume constant detection probability 
+  (p) which would correspond with M_0. Should I now try changing this p across 
+  time/individual/capture events? Or do we stick with seeing effects assuming constant p?
+  Would we want to see which models are more "robust" to the effects of errors occuring?
+  
+  
+  
+  
