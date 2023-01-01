@@ -37,7 +37,10 @@ generateDetects <- function(Ni,p_1m,maxMinute, seed = NULL){
   
   ## Simulate detections
   pcData <- pcData %>%
-    mutate(Detect = rbinom(n(), 1, p_1m))
+    mutate(Detect = rbinom(n(), 1, p_1m))%>%
+    group_by(locationID,individual)%>%
+    mutate(ch=paste(Detect,collapse="")) %>% # add count history column
+    ungroup()
   
   pcData
 }
@@ -105,6 +108,13 @@ generateErrors = function(pcData,alpha, seed = NULL){
   
   # add new individuals
   dfSplit = splitDetects(dfMove)
+  
+  # update ch column 
+  
+  dfSplit = dfSplit %>%
+    group_by(locationID,individual)%>%
+    mutate(ch=paste(Detect,collapse="")) %>% # add count history column
+    ungroup()
   
   return(dfSplit)
   
