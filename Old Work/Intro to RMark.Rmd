@@ -182,17 +182,10 @@ p_error changes; how is MSE,AIC
 dfmark 
 
 ```{r}
-# find formula and model type
-dfModel = generateFormula() %>%
-  filter(C == FALSE & Time == FALSE & Mixture == FALSE & Operation == "+")
-
-# fit the model 
-pformula = list(formula = parse_expr(dfModel$formula),share=TRUE)
-model1 = mark(dfMarkError, model = dfModel$model, model.parameters = list(p=pformula),delete=TRUE)
+testmodel = fitModel(dfMark)
 ```
 
-
 ```{r}
-fitModel(dfMark)
+testmodel
 ```
 
