@@ -85,3 +85,155 @@ fitModel = function(ch,bC=FALSE,bTime=FALSE,bMixture=FALSE,bAdditive=TRUE){
   
   return(dfEstimates)
 }
+
+runSingleSimulation = function(N_i,n_locations=1,lambda=15,p_1m=0.1,maxMinute=5,alpha=0, seed = NULL,bC=FALSE,bTime=FALSE,bMixture=FALSE,bAdditive=TRUE){
+  # generate regular data
+  #locationID = 1:n_locations
+  #N_i = rpois(n_locations,lambda)
+  #N_i = rnbinom(n_locations, mu = lambda, size= 1)
+  
+  # conditional for if population value generated is 0
+  #if(N_i ==0){
+  #  return(list(NA,NA))
+  #}
+  
+  dfMark = generateDetects(N_i,p_1m,maxMinute,seed)
+  dfMark = generateErrors(dfMark,alpha,seed) # if alpha = 0, error data is the same as regular data (checked in previous .Rmd)
+  dfMark = detectsToCapHist(dfMark)[,"ch"] # for now combine all detections regardless of locationID 
+  
+  # add conditional for if no individuals are detected 
+  if(nrow(dfMark)==0){
+    return(list(NA,NA))
+  }
+  
+  # fit model
+  dfResults = fitModel(dfMark,bC=bC,bTime=bTime,bMixture=bMixture,bAdditive = bAdditive)
+  pResults = dfResults[1,]
+  NResults = filter(dfResults, variable == "N")
+  # q: programMark has a "misidentification" feature --> explore more?
+  tempdf = rbind(pResults,NResults)
+    
+  # make summarised dataframe
+  lstParams = c(p_1m,sum(N_i))
+  dfOutput = tibble(trueValues = lstParams)
+  dfOutput = cbind(dfOutput,tempdf)
+  
+  # df to store parameters used
+  dfParameters = tibble(p_1m = p_1m,
+                        alpha = alpha,
+                        lambda = lambda,
+                        maxMinute = maxMinute,
+                        N = sum(N_i),
+                        bC=FALSE,
+                        bTime=FALSE,
+                        bMixture=FALSE,
+                        bAdditive=TRUE)
+  return(list(dfOutput, dfParameters))
+}
+
+# function to automate outouts of the simulation
+# lstNi should ideally be generated using rnbinom() or rpois
+runSimulation = function(nRuns = 2, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstLambda = c(15), lstMaxMin = c(10),seed=NULL){
+  
+  # initialize variables
+  if(!is.null(seed)){
+    set.seed(seed)
+  }
+  
+  dfFinalEst =  matrix(0,0,0)
+  dfFinalParams = matrix(0,0,0) # so that if we see any weird numbers, we can use the runSingleSimulation() function to investigate
+  dfCombinations = expand.grid(lstNi,lstP, lstAlpha, lstLambda, lstMaxMin)
+  colnames(dfCombinations) = c("Ni","P","Alpha","Lambda","MaxMin")
+  
+  # counter to record simulation number
+  simulationNumber = 1
+  
+  # combination counter -> keep track of how many times the combination has run
+  combinationNumber = 1
+  
+  # grab parameter values
+  for(row in 1:nrow(dfCombinations)){
+    temp_Ni = dfCombinations[row,"Ni"]
+    temp_p = dfCombinations[row,"P"]
+    temp_alpha = dfCombinations[row,"Alpha"]
+    temp_lambda = dfCombinations[row,"Lambda"]
+    temp_min = dfCombinations[row,"MaxMin"]
+    
+    # run the simulation multiple times for each parameter combo 
+    for(sim in 1:nRuns){
+      dfTemp = runSingleSimulation(N_i = temp_Ni, lambda=temp_lambda,p_1m=temp_p,maxMinute=temp_min,alpha=temp_alpha)
+      dfTempEst = dfTemp[[1]]
+      dfTempParams = dfTemp[[2]]
+      
+      # add conditional
+      if(is.null(nrow(dfTempEst))){
+        next()
+      }
+      
+      # calculate bias
+      #dfTempEst$bias = dfTempEst
+      
+      # add extra variables to track simulation number
+      dfTempEst$combinationNumber = combinationNumber
+      #dfTempParams$combinationNumber = combinationNumber
+      dfTempEst$simulationNumber = simulationNumber
+      dfTempParams$simulationNumber = simulationNumber
+      dfTempParams$seed = seed
+      dfFinalEst = rbind(dfFinalEst,dfTempEst)
+      dfFinalParams = rbind(dfFinalParams,dfTempParams)
+      simulationNumber = simulationNumber+1
+    }
+    # update combination counter
+    combinationNumber=combinationNumber+1
+    
+  }
+  
+  # merge dataframes
+  dfFinal = left_join(dfFinalEst, dfFinalParams, by="simulationNumber")
+  return(dfFinal) 
+}
+
+# function to use for debugging certain scenarios to see if estimates make sense
+testScenario = function(N_i,p_1m,alpha,maxMinute,nRuns,bC=FALSE,bTime=FALSE,bMixture=FALSE,bAdditive=FALSE){
+  dfFinal = matrix(0,0,0)
+  for(runs in 1:nRuns){
+    dfMark = generateDetects(N_i,p_1m,maxMinute)
+    dfMark = generateErrors(dfMark,alpha) # if alpha = 0, error data is the same as regular data (checked in previous .Rmd)
+    dfMark = detectsToCapHist(dfMark)[,"ch"] # for now combine all detections regardless of locationID 
+    
+    # add conditional for if no individuals are detected 
+    if(nrow(dfMark)==0){
+      return(list(NA,NA))
+    }
+    
+    # fit model
+    dfResults = fitModel(dfMark,bC=bC,bTime=bTime,bMixture=bMixture,bAdditive = bAdditive)
+    pResults = dfResults[1,]
+    NResults = filter(dfResults, variable == "N")
+    # q: programMark has a "misidentification" feature --> explore more?
+    tempdf = rbind(pResults,NResults)
+    
+    # make summarised dataframe
+    lstParams = c(p_1m,sum(N_i))
+    dfOutput = tibble(trueValues = lstParams)
+    dfOutput = cbind(dfOutput,tempdf)  
+    dfOutput$simulationNumber = runs
+    dfFinal = rbind(dfFinal,dfOutput)
+  }
+  return(dfFinal)
+}
+
+
+calculateStatistics = function(nRuns = 2,lstNi = c(10,20),lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstLambda = c(15), lstMaxMin = c(10),seed=NULL){
+  # gather simulation results
+  dfSummaryStats = runSimulation(nRuns = nRuns,lstNi = lstNi, lstP = lstP, lstAlpha = lstAlpha, lstLambda = lstLambda, lstMaxMin = lstMaxMin,seed=seed)
+
+  # find bias
+  dfSummaryStats = dfEst %>%
+    filter(variable == "N")%>%
+    group_by(combinationNumber)%>%
+    summarise(N = unique(N),
+              AvgNhat = mean(estimate),
+              sdNhat = sd(estimate))
+  
+}
