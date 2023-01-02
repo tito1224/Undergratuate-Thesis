@@ -226,14 +226,26 @@ testScenario = function(N_i,p_1m,alpha,maxMinute,nRuns,bC=FALSE,bTime=FALSE,bMix
 
 calculateStatistics = function(nRuns = 2,lstNi = c(10,20),lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstLambda = c(15), lstMaxMin = c(10),seed=NULL){
   # gather simulation results
-  dfSummaryStats = runSimulation(nRuns = nRuns,lstNi = lstNi, lstP = lstP, lstAlpha = lstAlpha, lstLambda = lstLambda, lstMaxMin = lstMaxMin,seed=seed)
+  simData = runSimulation(nRuns = nRuns,lstNi = lstNi, lstP = lstP, lstAlpha = lstAlpha, lstLambda = lstLambda, lstMaxMin = lstMaxMin,seed=seed)
 
-  # find bias
-  dfSummaryStats = dfEst %>%
-    filter(variable == "N")%>%
-    group_by(combinationNumber)%>%
-    summarise(N = unique(N),
-              AvgNhat = mean(estimate),
-              sdNhat = sd(estimate))
+  # find summary stats
+  # notes: coverage probability isthe proportion of confidence intervals that capture the true population parameter 
+  simData$bCoverage = ifelse(simData$estimate >= simData$lcl & simData$estimate <= simData$ucl,1,0)
+  simData$squaredError = (simData$estimate - simData$trueValues)**2
+  simData$width = simData$ucl - simData$lcl
   
+  dfSummaryStats = simData %>%
+    filter(variable == "N")%>%
+    group_by(p_1m,alpha,N)%>%
+    summarise(AvgNhat = mean(estimate),
+              AvgNhatSE= mean(se),
+              sdNhat = sd(estimate),
+              biasNhat = AvgNhat - N,
+              mse = mean(squaredError),
+              bias_SE_Nhat = AvgNhatSE - sdNhat,
+              coverage = sum(bCoverage)/n(),
+              avgWidth = mean(width),
+              avgAIC = mean(AIC))
+  dfSummaryStats = dfSummaryStats[!duplicated(dfSummaryStats)]
+  return(list(dfSummaryStats, simData))
 }
