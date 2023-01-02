@@ -9,6 +9,10 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+# To do
+
+- find a way to incorporate c, time and heterogeneity into the generateDetects() function
+
 # Load Functions
 ```{r}
 library(tidyverse)
@@ -17,9 +21,68 @@ source("./Functions/generatePointCount.R")
 source("./Functions/runSimulation.R")
 ```
 
+
+# Test Functions
+```{r}
+# set parameters
+p_1m = 0.5  
+maxMinute = 5
+colsUse = paste0("Minute",1:maxMinute)
+n_locations = 50
+lambda = 15 # get this number from some data?
+alpha=0.3
+
+set.seed(1)
+locationID = 1:n_locations
+#N_i = rpois(n_locations,lambda)
+N_i = rnbinom(n_locations, mu = lambda, size= 1)
+dfPop = as.data.frame(cbind(locationID, N_i))
+
+# generate counts
+dfCount = generateDetects(dfPop$N_i, p_1m,maxMinute,10)
+
+# show data in wide format
+dfWide = detectsToCapHist(dfCount)
+dfWide = left_join(dfWide, dfPop, by = "locationID")
+
+dfMark = dfWide[,"ch"] # data for testing individual functions
+```
+
+Test out some invididual functions:
+
+Function to make formula dataframe
+```{r}
+generateFormula()
+```
+Test fitting a model using parameters (assuming we have data)
+
+```{r}
+# true population
+sum(dfPop$N_i)
+```
+
+```{r}
+fitModel(dfMark, bMixture = TRUE, nMixtures = 3)
+```
+
+```{r}
+fitModel(dfMark, bTime = TRUE, bAdditive = FALSE)
+```
+
+
+Results of running a *single* simulation
+```{r}
+runSingleSimulation(N_i = 20,p_1m=0.2,seed=10)
+```
+
+# Run Simulation
+
 Test simulation with multiple runs, and only alpha changing (for now) (how do i stop the text file from showing??)
+Also when i set a seed, way more biased results -> confused.
+
+Really weird result when nRuns = 10, lstMaxMin = 5, seed = 10,lstNi = 20
 ```{r, results = "hide"}
-dfSimulation1 = calculateStatistics(nRuns = 2, lstNi = c(20), lstP = c(0.2), lstAlpha = c(0,0.05,0.1,0.2,0.3), seed=1)
+dfSimulation1 = calculateStatistics(nRuns = 3, lstNi = c(20), lstP = c(0.2), lstAlpha = c(0,0.1,0.3),lstMaxMin = c(5),seed=10)
 ```
 
 
@@ -27,10 +90,54 @@ dfSimulation1 = calculateStatistics(nRuns = 2, lstNi = c(20), lstP = c(0.2), lst
 dfSimulationEst = dfSimulation1[[1]]
 dfSimulationParams= dfSimulation1[[2]]%>%
   filter(variable == "N")
+dfSimulationParams_P = dfSimulation1[[2]]%>%
+  filter(variable != "N")
+dfSimulationHist = dfSimulation1[[3]]
 ```
 
 ```{r}
 dfSimulationEst
 dfSimulationParams
+dfSimulationHist
 ```
+
+Try to see where weird estimates are coming from - doesn't look like ch is being repeated 
+in the same order...
+Could this just be a bad sample?
+```{r}
+dfSim = detectsToCapHist(dfSimulationHist %>%
+  filter(simulationNumber==1))
+dfSim
+
+fitModel(dfSim[,"ch"])
+```
+
+When I increase n from 20 to around 100 I get the following:
+```{r}
+dfSimulation1 = calculateStatistics(nRuns = 3, lstNi = c(100), lstP = c(0.2), lstAlpha = c(0,0.1,0.3),lstMaxMin = c(5),seed=10)
+dfSimulationEst = dfSimulation1[[1]]
+dfSimulationParams= dfSimulation1[[2]]%>%
+  filter(variable == "N")
+dfSimulationParams_P = dfSimulation1[[2]]%>%
+  filter(variable != "N")
+dfSimulationHist = dfSimulation1[[3]]
+dfSimulationEst
+dfSimulationParams
+dfSimulationHist
+```
+
+Some illustrations:
+
+N hat estimates
+
+```{r}
+
+```
+
+
+```{r}
+fitModel(dfMark)
+```
+
+
 
