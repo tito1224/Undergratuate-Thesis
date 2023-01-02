@@ -1,0 +1,36 @@
+---
+title: "Simulation Intro"
+author: "Tito"
+date: "2023-01-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load Functions
+```{r}
+library(tidyverse)
+library(RMark)
+source("./Functions/generatePointCount.R")
+source("./Functions/runSimulation.R")
+```
+
+Test simulation with multiple runs, and only alpha changing (for now) (how do i stop the text file from showing??)
+```{r, results = "hide"}
+dfSimulation1 = calculateStatistics(nRuns = 2, lstNi = c(20), lstP = c(0.2), lstAlpha = c(0,0.05,0.1,0.2,0.3), seed=1)
+```
+
+
+```{r}
+dfSimulationEst = dfSimulation1[[1]]
+dfSimulationParams= dfSimulation1[[2]]%>%
+  filter(variable == "N")
+```
+
+```{r}
+dfSimulationEst
+dfSimulationParams
+```
+
