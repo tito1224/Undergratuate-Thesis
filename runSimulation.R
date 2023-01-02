@@ -1,6 +1,7 @@
 library(tidyverse)
 library(RMark)
 library(stringi)
+library(rlang)
 source("./Functions/generatePointCount.R")
 
 # start with helper functions
@@ -10,9 +11,6 @@ source("./Functions/generatePointCount.R")
 ## I believe if we need to model individual heterogeneity (ie use mixture argument) then we use either HetClosed or FullHet
 ## HetClosed does not include c as a parameter whereas FullHet includes c (refer to https://github.com/jlaake/RMark/blob/master/RMark/inst/MarkModels.pdf)
 ## also it seems we can only have two groups for the mixture model?
-## useC means detection probability after first capture is different (takes into account trap happy or trap shy effect; ie behaviour)
-## useTime means detection probability varies across time intervals --> assume random variation? 
-## useMixture means heterogeneity in detection probability across individuals (so if we assume A groups, each individual has a probability of belonging to each group. I think rMark uses 2 groups)
 generateFormula = function(){
   # create combinations
   lstC = c("c","NA")
@@ -53,6 +51,37 @@ generateFormula = function(){
 
 ## assuming we have the data, fit the model, with necessary specifications
 ## use the parameters to determine which formula and model to use
+## bC means detection probability after first capture is different (takes into account trap happy or trap shy effect; ie behaviour)
+## bTime means detection probability varies across time intervals --> assume random variation? 
+## bMixture means heterogeneity in detection probability across individuals (so if we assume A groups, each individual has a probability of belonging to each group. I think rMark uses 2 groups)
+## bAdditive means we are looking at an additive model (no interactions included). If false, it means we are looking at a model with all interactions in addition to main effects
+#Q: use real or beta df? fitModel(dfMark, bC=TRUE,bTime=TRUE, bAdditive=TRUE) vs fitModel(dfMark, bC=TRUE,bTime=TRUE, bAdditive=FALSE)
 fitModel = function(ch,bC=FALSE,bTime=FALSE,bMixture=FALSE,bAdditive=TRUE){
   
+  bAdditive = ifelse(bAdditive==TRUE,"+","*")
+  
+  # find formula and model type
+  dfModel = generateFormula() %>%
+    filter(C == bC & Time == bTime & Mixture == bMixture & Operation == bAdditive)
+  
+  # fit the model 
+  pformula = list(formula = eval(parse_expr(dfModel$formula)),share=TRUE)
+  model = mark(ch, model = dfModel$model, model.parameters = list(p=pformula),delete=TRUE)
+  
+  # extract relevant variables - estimate, se, ul, cl, aic
+  dfPopulationEstimates = model$results$derived$`N Population Size`
+  dfPopulationEstimates$variable = "N"
+  intAIC = model$results$AICc
+  
+  # get estimates of p, c (if applicable), se, lcl & ucl
+  estP = model$results$real[,1:4]
+  #estP = model$results$beta[,1:4]
+  estP = tibble::rownames_to_column(estP, "variable")
+  dfEstimates = bind_rows(estP, dfPopulationEstimates)
+  dfEstimates$AIC = intAIC
+  
+  # clean data 
+  dfEstimates = filter(dfEstimates,!str_detect(variable,"f0"))
+  
+  return(dfEstimates)
 }
