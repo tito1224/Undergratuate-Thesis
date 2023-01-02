@@ -1,0 +1,198 @@
+---
+title: "RMark Intro"
+author: "Tito"
+date: "2022-12-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load Data
+```{r}
+library(tidyverse)
+library(RMark)
+source("./Functions/generatePointCount.R")
+
+# set parameters
+p_1m = 0.5  
+maxMinute = 10
+colsUse = paste0("Minute",1:maxMinute)
+n_locations = 50
+lambda = 15 # get this number from some data?
+alpha=0.3
+```
+
+Generate population data
+```{r}
+set.seed(1)
+locationID = 1:n_locations
+#N_i = rpois(n_locations,lambda)
+N_i = rnbinom(n_locations, mu = lambda, size= 1)
+dfPop = as.data.frame(cbind(locationID, N_i))
+```
+
+Generate counts
+```{r}
+# generate counts
+dfCount = generateDetects(dfPop$N_i, p_1m,maxMinute,10)
+
+# show data in wide format
+dfWide = detectsToCapHist(dfCount)
+dfWide = left_join(dfWide, dfPop, by = "locationID")
+head(dfWide[,1:3])
+
+```
+
+
+```{r}
+dfWideSummary = formatData(dfCount,isSummarised = TRUE)
+dfWideSummary
+
+```
+
+
+```{r}
+dfError = generateErrors(dfCount,alpha,1) # combined function
+head(dfError)
+```
+
+
+```{r}
+dfPopError = formatData(dfError,isSummarised = TRUE)
+head(dfPopError)
+```
+
+
+# Rmark 
+
+Use model M0 for the first pass 
+
+```{r}
+# example
+#data(edwards.eberhardt)
+#?edwards.eberhardt
+```
+
+
+## Model M0 on data with no errors 
+
+
+Why the intercept value? 
+```{r}
+dfMark = dfWide[,"ch"]
+constantP = list(formula=~c,share=TRUE)
+model1 = mark(dfMark,model="Closed",model.parameters = list(p=constantP),delete = TRUE)
+```
+Notes: 
+- f0 represents individuals never caught 
+- lower control limit & upper control limit?
+- 
+```{r}
+model1$results
+```
+
+
+Can we use AIC for comparison? Assumed it was more for cases of multi-linear reg. especially because we're just looking @ count hist? 
+```{r}
+model1$results$AICc
+```
+
+estimate of 675 in total population 
+
+- close because 10 time intervals + p_1m = 0.5 
+- so prob of detection at least once is PredictProbability(10,0.5)= 0.999
+```{r}
+print(sum(dfPop$N_i))
+print(sum(dfWideSummary$C_i))
+```
+
+
+Same model but use FullHet model
+```{r}
+dfMark = dfWide[,"ch"]
+constantP = list(formula=~time+mixture,share=TRUE)
+model1 = mark(dfMark,model="FullHet",model.parameters = list(p=constantP),delete = TRUE)
+```
+```{r}
+model1$results
+```
+
+```{r}
+model1$results$AICc
+
+test1 = model1$results$derived$`N Population Size`
+test1$variable = "N"
+test2 = model1$results$real[,1:4]
+test2 = rownames_to_column(test2,"variable")
+```
+
+
+
+```{r}
+test1
+test2
+bind_rows(test1, test2)
+```
+
+
+interaction matters!
+```{r}
+dfMark = dfWide[,"ch"]
+constantP = list(formula=~time*mixture,share=TRUE)
+model1 = mark(dfMark,model="FullHet",model.parameters = list(p=constantP),delete = TRUE)
+model1$results
+```
+
+
+## Model M0 on data with errors
+
+Makes sense - higher pop estimate --> would it be reasonable to assume a jump from
+675 individuals to 2k? when p_error = 0.3
+
+675/0.3 ~ 2k 
+
+PredictProbability(10,0.3)= prob of making at least one error = 0.972 -> given we already detect most individuals, would expect to count at least twice the number of individuals which is what we see 
+
+
+```{r}
+dfMarkError = detectsToCapHist(dfError)[,"ch"]
+constantP = list(formula=~1,share=TRUE)
+modelError = mark(dfMarkError,model="Closed",model.parameters = list(p=constantP),delete = TRUE)
+modelError$results
+```
+
+```{r}
+sum(dfPopError$C_i)
+```
+
+With respect to making the process:
+
+- function to fit model, return estimates,return se, return confidence interval, 
+return AICc, return MSE -> have the process done
+
+- for now constant p --> analysis on what happens as length of study changes, p_1m changes, 
+p_error changes; how is MSE,AIC
+
+
+
+
+
+dfmark 
+
+```{r}
+# find formula and model type
+dfModel = generateFormula() %>%
+  filter(C == FALSE & Time == FALSE & Mixture == FALSE & Operation == "+")
+
+# fit the model 
+pformula = list(formula = parse_expr(dfModel$formula),share=TRUE)
+model1 = mark(dfMarkError, model = dfModel$model, model.parameters = list(p=pformula),delete=TRUE)
+```
+
+
+```{r}
+fitModel(dfMark)
+```
+

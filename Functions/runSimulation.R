@@ -56,7 +56,7 @@ generateFormula = function(){
 ## bMixture means heterogeneity in detection probability across individuals (so if we assume A groups, each individual has a probability of belonging to each group. I think rMark uses 2 groups)
 ## bAdditive means we are looking at an additive model (no interactions included). If false, it means we are looking at a model with all interactions in addition to main effects
 #Q: use real or beta df? fitModel(dfMark, bC=TRUE,bTime=TRUE, bAdditive=TRUE) vs fitModel(dfMark, bC=TRUE,bTime=TRUE, bAdditive=FALSE)
-fitModel = function(ch,bC=FALSE,bTime=FALSE,bMixture=FALSE,bAdditive=TRUE){
+fitModel = function(ch,bC=FALSE,bTime=FALSE,bMixture=FALSE,bAdditive=TRUE,nMixtures=1){
   
   bAdditive = ifelse(bAdditive==TRUE,"+","*")
   
@@ -66,7 +66,7 @@ fitModel = function(ch,bC=FALSE,bTime=FALSE,bMixture=FALSE,bAdditive=TRUE){
   
   # fit the model 
   pformula = list(formula = eval(parse_expr(dfModel$formula)),share=TRUE)
-  model = mark(ch, model = dfModel$model, model.parameters = list(p=pformula),delete=TRUE)
+  model = mark(ch, model = dfModel$model, model.parameters = list(p=pformula),delete=TRUE,output=FALSE,mixtures=nMixtures)
   
   # extract relevant variables - estimate, se, ul, cl, aic
   dfPopulationEstimates = model$results$derived$`N Population Size`
@@ -86,7 +86,7 @@ fitModel = function(ch,bC=FALSE,bTime=FALSE,bMixture=FALSE,bAdditive=TRUE){
   return(dfEstimates)
 }
 
-runSingleSimulation = function(N_i,n_locations=1,lambda=15,p_1m=0.1,maxMinute=5,alpha=0, seed = NULL,bC=FALSE,bTime=FALSE,bMixture=FALSE,bAdditive=TRUE){
+runSingleSimulation = function(N_i,n_locations=1,lambda=15,p_1m=0.1,maxMinute=5,alpha=0, seed = NULL,bC=FALSE,bTime=FALSE,bMixture=FALSE,bAdditive=TRUE,nMixtures=1){
   # generate regular data
   #locationID = 1:n_locations
   #N_i = rpois(n_locations,lambda)
@@ -107,7 +107,7 @@ runSingleSimulation = function(N_i,n_locations=1,lambda=15,p_1m=0.1,maxMinute=5,
   }
   
   # fit model
-  dfResults = fitModel(dfMark,bC=bC,bTime=bTime,bMixture=bMixture,bAdditive = bAdditive)
+  dfResults = fitModel(dfMark,bC=bC,bTime=bTime,bMixture=bMixture,bAdditive = bAdditive,nMixtures = nMixtures)
   pResults = dfResults[1,]
   NResults = filter(dfResults, variable == "N")
   # q: programMark has a "misidentification" feature --> explore more?
@@ -133,7 +133,7 @@ runSingleSimulation = function(N_i,n_locations=1,lambda=15,p_1m=0.1,maxMinute=5,
 
 # function to automate outouts of the simulation
 # lstNi should ideally be generated using rnbinom() or rpois
-runSimulation = function(nRuns = 2, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstLambda = c(15), lstMaxMin = c(10),seed=NULL){
+runSimulation = function(nRuns = 2, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstLambda = c(15), lstMaxMin = c(10),seed=NULL,bC=FALSE,bTime=FALSE,bMixture=FALSE,bAdditive=TRUE,nMixtures=1){
   
   # initialize variables
   if(!is.null(seed)){
@@ -161,7 +161,7 @@ runSimulation = function(nRuns = 2, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlph
     
     # run the simulation multiple times for each parameter combo 
     for(sim in 1:nRuns){
-      dfTemp = runSingleSimulation(N_i = temp_Ni, lambda=temp_lambda,p_1m=temp_p,maxMinute=temp_min,alpha=temp_alpha)
+      dfTemp = runSingleSimulation(N_i = temp_Ni, lambda=temp_lambda,p_1m=temp_p,maxMinute=temp_min,alpha=temp_alpha,bC=bC,bTime=bTime,bMixture=bMixture,bAdditive = bAdditive,nMixtures = nMixtures)
       dfTempEst = dfTemp[[1]]
       dfTempParams = dfTemp[[2]]
       
@@ -224,9 +224,9 @@ testScenario = function(N_i,p_1m,alpha,maxMinute,nRuns,bC=FALSE,bTime=FALSE,bMix
 }
 
 
-calculateStatistics = function(nRuns = 2,lstNi = c(10,20),lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstLambda = c(15), lstMaxMin = c(10),seed=NULL){
+calculateStatistics = function(nRuns = 2,lstNi = c(10,20),lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstLambda = c(15), lstMaxMin = c(10),seed=NULL,bC=FALSE,bTime=FALSE,bMixture=FALSE,bAdditive=TRUE,nMixtures=1){
   # gather simulation results
-  simData = runSimulation(nRuns = nRuns,lstNi = lstNi, lstP = lstP, lstAlpha = lstAlpha, lstLambda = lstLambda, lstMaxMin = lstMaxMin,seed=seed)
+  simData = runSimulation(nRuns = nRuns,lstNi = lstNi, lstP = lstP, lstAlpha = lstAlpha, lstLambda = lstLambda, lstMaxMin = lstMaxMin,seed=seed,bC=bC,bTime=bTime,bMixture=bMixture,bAdditive = bAdditive,nMixtures = nMixtures)
 
   # find summary stats
   # notes: coverage probability isthe proportion of confidence intervals that capture the true population parameter 
@@ -236,7 +236,7 @@ calculateStatistics = function(nRuns = 2,lstNi = c(10,20),lstP = c(0.1,0.5), lst
   
   dfSummaryStats = simData %>%
     filter(variable == "N")%>%
-    group_by(p_1m,alpha,N)%>%
+    group_by(p_1m,alpha,N,combinationNumber)%>%
     summarise(AvgNhat = mean(estimate),
               AvgNhatSE= mean(se),
               sdNhat = sd(estimate),
@@ -246,6 +246,6 @@ calculateStatistics = function(nRuns = 2,lstNi = c(10,20),lstP = c(0.1,0.5), lst
               coverage = sum(bCoverage)/n(),
               avgWidth = mean(width),
               avgAIC = mean(AIC))
-  dfSummaryStats = dfSummaryStats[!duplicated(dfSummaryStats)]
+  dfSummaryStats = dfSummaryStats[!duplicated(dfSummaryStats),]
   return(list(dfSummaryStats, simData))
 }
