@@ -10,7 +10,7 @@ source("./Functions/generatePointCount.R")
 ## create a dataframe to represent all model combinations - doing it this way so if we need to make a change to the formula, it only needs to be made once in this section
 ## I believe if we need to model individual heterogeneity (ie use mixture argument) then we use either HetClosed or FullHet
 ## HetClosed does not include c as a parameter whereas FullHet includes c (refer to https://github.com/jlaake/RMark/blob/master/RMark/inst/MarkModels.pdf)
-## also it seems we can only have two groups for the mixture model?
+## also it seems we can only have two groups for the mixture model? <- nvm mark() has a mixtures argument that we can change to use more groups
 generateFormula = function(){
   # create combinations
   lstC = c("c","NA")
@@ -42,7 +42,8 @@ generateFormula = function(){
  dfCombinations[dfCombinations$formula=="~NA","formula"] = "~1"
  
  # add another column to indicate what the model type should be 
- dfCombinations$model = ifelse(dfCombinations$Mixture=="NA","Closed", ifelse(dfCombinations$Mixture!="NA"& dfCombinations$C == "NA","HetClosed","FullHet"))
+ dfCombinations$model = ifelse(dfCombinations$Mixture == "NA","Closed","FullHet")
+ #dfCombinations$model = ifelse(dfCombinations$Mixture=="NA","Closed", ifelse(dfCombinations$Mixture!="NA"& dfCombinations$C == "NA","HetClosed","FullHet"))
  
  # revert values in C, Time and Mixture columns to boolean for use in later code
  dfCombinations[,1:3] = ifelse(dfCombinations[,1:3]=="NA",FALSE,TRUE)

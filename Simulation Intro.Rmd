@@ -48,7 +48,7 @@ dfWide = left_join(dfWide, dfPop, by = "locationID")
 dfMark = dfWide[,"ch"] # data for testing individual functions
 ```
 
-Test out some invididual functions:
+Test out some individual functions:
 
 Function to make formula dataframe
 ```{r}
@@ -65,10 +65,15 @@ sum(dfPop$N_i)
 fitModel(dfMark, bMixture = TRUE, nMixtures = 3)
 ```
 
+Investigate the effect of no interaction:
 ```{r}
-fitModel(dfMark, bTime = TRUE, bAdditive = FALSE)
+fitModel(dfMark, bC = TRUE, bMixture =TRUE, bAdditive = TRUE)
 ```
 
+vs interaction:
+```{r}
+fitModel(dfMark, bC = TRUE,bMixture=TRUE, bAdditive = FALSE)
+```
 
 Results of running a *single* simulation
 ```{r}
@@ -80,9 +85,9 @@ runSingleSimulation(N_i = 20,p_1m=0.2,seed=10)
 Test simulation with multiple runs, and only alpha changing (for now) (how do i stop the text file from showing??)
 Also when i set a seed, way more biased results -> confused.
 
-Really weird result when nRuns = 10, lstMaxMin = 5, seed = 10,lstNi = 20
+Really weird result when nRuns = 10, lstMaxMin = 5, seed = 10,lstNi = 20 -> is it just because I have a small N?
 ```{r, results = "hide"}
-dfSimulation1 = calculateStatistics(nRuns = 3, lstNi = c(20), lstP = c(0.2), lstAlpha = c(0,0.1,0.3),lstMaxMin = c(5),seed=10)
+dfSimulation1 = calculateStatistics(nRuns = 10, lstNi = c(20), lstP = c(0.2), lstAlpha = c(0,0.1,0.3),lstMaxMin = c(5),seed=10)
 ```
 
 
@@ -100,6 +105,21 @@ dfSimulationEst
 dfSimulationParams
 dfSimulationHist
 ```
+
+```{r}
+ggplot(dfSimulationParams)+ 
+  geom_boxplot(aes(y = estimate,x = as.factor(combinationNumber)))+ 
+  theme_light()
+```
+
+```{r}
+dfSimulationParams%>%
+  filter(estimate != max(estimate))%>%
+ggplot()+ 
+  geom_boxplot(aes(y = estimate,x = as.factor(combinationNumber)))+ 
+  theme_light()
+```
+
 
 Try to see where weird estimates are coming from - doesn't look like ch is being repeated 
 in the same order...
@@ -114,7 +134,7 @@ fitModel(dfSim[,"ch"])
 
 When I increase n from 20 to around 100 I get the following:
 ```{r}
-dfSimulation1 = calculateStatistics(nRuns = 3, lstNi = c(100), lstP = c(0.2), lstAlpha = c(0,0.1,0.3),lstMaxMin = c(5),seed=10)
+dfSimulation1 = calculateStatistics(nRuns = 10, lstNi = c(100), lstP = c(0.2), lstAlpha = c(0,0.05,0.1,0.2,0.3),lstMaxMin = c(5),seed=10)
 dfSimulationEst = dfSimulation1[[1]]
 dfSimulationParams= dfSimulation1[[2]]%>%
   filter(variable == "N")
@@ -128,15 +148,10 @@ dfSimulationHist
 
 Some illustrations:
 
-N hat estimates
-
 ```{r}
-
-```
-
-
-```{r}
-fitModel(dfMark)
+ggplot(dfSimulationParams)+ 
+  geom_boxplot(aes(y = estimate,x = as.factor(combinationNumber)))+ 
+  theme_light()
 ```
 
 
