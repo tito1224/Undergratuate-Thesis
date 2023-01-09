@@ -48,6 +48,7 @@ dfWide = left_join(dfWide, dfPop, by = "locationID")
 dfMark = dfWide[,"ch"] # data for testing individual functions
 ```
 
+
 Test out some individual functions:
 
 Function to make formula dataframe
@@ -62,28 +63,28 @@ sum(dfPop$N_i)
 ```
 
 ```{r}
-fitModel(dfMark, bMixture = TRUE, nMixtures = 3)
+fitModel(dfMark,strFormula = "~1",strModel="Closed", nMixtures = 3)
 ```
 
 Investigate the effect of no interaction:
 ```{r}
-fitModel(dfMark, bC = TRUE, bMixture =TRUE, bAdditive = TRUE)
+fitModel(dfMark, strFormula = "~c+mixture",strModel="FullHet")
 ```
 
 vs interaction:
 ```{r}
-fitModel(dfMark, bC = TRUE,bMixture=TRUE, bAdditive = FALSE)
+fitModel(dfMark, strFormula = "~c*mixture",strModel="FullHet")
 ```
 
 Results of running a *single* simulation
 ```{r}
-runSingleSimulation(N_i = 20,p_1m=0.2,seed=10)
+runSingleSimulation(N_i=20,p_1m=0.2,seed=10)
 ```
 
 # Run Simulation
 
 Test simulation with multiple runs, and only alpha changing (for now) (how do i stop the text file from showing??)
-Also when i set a seed, way more biased results -> confused.
+Also when i set a seed, way more biased results -> confused. Or maybe once again it's because of the small Ni I'm using?
 
 Really weird result when nRuns = 10, lstMaxMin = 5, seed = 10,lstNi = 20 -> is it just because I have a small N?
 ```{r, results = "hide"}
@@ -124,17 +125,19 @@ ggplot()+
 Try to see where weird estimates are coming from - doesn't look like ch is being repeated 
 in the same order...
 Could this just be a bad sample?
+
+Sampled 10 individuals, each detected one time only within 5 occasions. The estimated detection probability is extremely small (thus resulting in the large N). 
 ```{r}
 dfSim = detectsToCapHist(dfSimulationHist %>%
-  filter(simulationNumber==1))
+  filter(simulationNumber==12)) # simulationNumber == 1 or 2 shows that the number of sampled individuals isn't always 10 - which is how it should be 
 dfSim
 
 fitModel(dfSim[,"ch"])
 ```
 
-When I increase n from 20 to around 100 I get the following:
+When I increase n from 20 to around 676 (like in examples earlier) I get the following:
 ```{r}
-dfSimulation1 = calculateStatistics(nRuns = 10, lstNi = c(100), lstP = c(0.2), lstAlpha = c(0,0.05,0.1,0.2,0.3),lstMaxMin = c(5),seed=10)
+dfSimulation1 = calculateStatistics(nRuns = 10, lstNi = c(676), lstP = c(0.2), lstAlpha = c(0,0.05,0.1,0.15,0.2,0.25,0.3),lstMaxMin = c(5),seed=10)
 dfSimulationEst = dfSimulation1[[1]]
 dfSimulationParams= dfSimulation1[[2]]%>%
   filter(variable == "N")
@@ -148,11 +151,33 @@ dfSimulationHist
 
 Some illustrations:
 
+Median seems to be increasing exponentially as alpha increases.
 ```{r}
 ggplot(dfSimulationParams)+ 
   geom_boxplot(aes(y = estimate,x = as.factor(combinationNumber)))+ 
   theme_light()
 ```
+Somewhat exponential then the rate of increase seems to fall -> I wonder if there's some value of alpha where it peaks and then estimates are stagnant? There has to be since once alpha is a certain value, no more splits can happen (depending on how many individuals we have).
+```{r}
+dfSimulationParams%>%
+  group_by(p_1m,alpha,N,maxMinute,strFormula,combinationNumber)%>%
+  summarise(median = median(estimate))%>%
+  ggplot()+
+  geom_point(aes(x=alpha,y=median))+ 
+  geom_line(aes(x=alpha,y=median))+
+  theme_light()+ 
+  labs(title = "Median Population Estimates")
+```
 
 
+```{r}
+dfSimulationParams%>%
+  group_by(p_1m,alpha,N,maxMinute,strFormula,combinationNumber)%>%
+  summarise(mean = mean(estimate))%>%
+  ggplot()+
+  geom_point(aes(x=alpha,y=mean))+ 
+  geom_line(aes(x=alpha,y=mean))+
+  theme_light()+
+  labs(title = "Mean Population Estimates")
+```
 
