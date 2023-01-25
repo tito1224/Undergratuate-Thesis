@@ -18,7 +18,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(RMark)
 source("./Functions/generatePointCount.R")
-source("./Functions/runSimulation.R")
+source("./Functions/runSimulationFunctions.R")
 ```
 
 
@@ -57,13 +57,14 @@ generateFormula()
 ```
 Test fitting a model using parameters (assuming we have data)
 
+`fitModel()` basically just uses mark() function to find estimates-> returns p and N estimates
 ```{r}
 # true population
 sum(dfPop$N_i)
 ```
 
 ```{r}
-fitModel(dfMark,strFormula = "~1",strModel="Closed", nMixtures = 3)
+fitModel(dfMark,strFormula = "~1",strModel="Closed")
 ```
 
 Investigate the effect of no interaction:
@@ -76,7 +77,10 @@ vs interaction:
 fitModel(dfMark, strFormula = "~c*mixture",strModel="FullHet")
 ```
 
-Results of running a *single* simulation
+Results of running a *single* simulation:
+
+- runSingleSimulation will generate a dataframe of detection histories using the given population value (N_i) and uses fitModel() to reutrn the p and N estimates, along with the se, confidence interval,aic
+- it also returns the parameters used as input in the function call, and the detection history that was generated (in long format)
 ```{r}
 runSingleSimulation(N_i=20,p_1m=0.2,seed=10)
 ```
