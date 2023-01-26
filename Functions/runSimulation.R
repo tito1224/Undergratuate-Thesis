@@ -7,6 +7,7 @@ library(rlang)
 ## Load source code
 source("./Functions/generatePointCount.R")
 source("./Functions/runSimulationFunctions.R")
+source("./Functions/simulation_wrapper.R")
 
 ## Read command line arguments
 args <- commandArgs(trailingOnly=TRUE)
@@ -22,7 +23,7 @@ lstAlpha =c(0.1,0.3)
 lstMaxMin = c(5,10)
 lstFormula = c("~1")
 lstMixtures = c(1)
-lstseed = c(NULL)
+lstSeed = c("NULL")
 strModel = "Closed"
 
 params = expand.grid(nRuns,lstNi,lstP, lstAlpha, lstMaxMin,lstFormula,lstMixtures,lstSeed,strModel)

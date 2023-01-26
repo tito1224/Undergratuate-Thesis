@@ -3,7 +3,7 @@ library(RMark)
 library(stringi)
 library(rlang)
 source("./Functions/generatePointCount.R")
-source("./Functions/runSimulation.R")
+source("./Functions/runSimulationFunctions.R")
 
 # add simulation wrapper function by Dr. Bonner to help keep track of what is 
 # run on the super computers
@@ -20,7 +20,7 @@ simulation_wrapper = function(params){
   lstMixtures=params$lstMixtures
   intSeed=params$seed
   strModel=params$strModel
-  
+  print(nRuns)
   # run the simulation
   results = calculateStatistics(nRuns = nRuns[id], lstNi = lstNi[id], lstP = lstP[id], 
                       lstAlpha = lstAlpha[id], lstMaxMin = lstMaxMin[id],
