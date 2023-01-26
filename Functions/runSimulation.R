@@ -10,10 +10,11 @@ source("./Functions/runSimulationFunctions.R")
 source("./Functions/simulation_wrapper.R")
 
 ## Read command line arguments
-args <- commandArgs(trailingOnly=TRUE)
+args = commandArgs(trailingOnly=TRUE)
 
 ## Set job number
-id <- as.integer(args[1])
+id = as.integer(args[1]) # what is this??
+#id = 1
 
 ## list parameters and make a dataframe out of it as inputs
 nRuns = 2
@@ -27,8 +28,8 @@ lstSeed = c("NULL")
 strModel = "Closed"
 
 params = expand.grid(nRuns,lstNi,lstP, lstAlpha, lstMaxMin,lstFormula,lstMixtures,lstSeed,strModel)
-colnames(params) = c(nRuns,"lstNi","lstP","lstAlpha","lstMaxMin","lstFormula","lstMixtures","lstSeed","strModel")
-params$Formula = as.character(params$Formula) # for some reason this column turns into a factor variable?
+colnames(params) = c("nRuns","lstNi","lstP","lstAlpha","lstMaxMin","lstFormula","lstMixtures","lstSeed","strModel")
+params$lstFormula = as.character(params$lstFormula) # for some reason this column turns into a factor variable?
 # params = mutate(params, Scenario = row_number()) %>%
 #   crossing(Rep = 1:nRuns)
 
