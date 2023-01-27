@@ -80,7 +80,7 @@ fitModel = function(ch,strFormula="~1",strModel="Closed",nMixtures=1){
   return(dfEstimates)
 }
 
-runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",strModel="Closed",nMixtures=1,seed = "NULL"){
+runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",strModel="Closed",nMixtures=1,seed = NULL){
   # generate regular data
   #locationID = 1:n_locations
   #N_i = rpois(n_locations,lambda)
@@ -92,9 +92,6 @@ runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",
   #}
   
   # need to have NULL input as a string
-  if(seed =="NULL"){
-    seed = NULL
-  }
   
   # remember that Ni can be a list!
   dfMarkInitial = generateDetects(N_i,p_1m,maxMinute,seed)
@@ -137,12 +134,9 @@ runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",
 
 # function to automate outputs of the simulation
 # lstNi should ideally be generated using rnbinom() or rpois but I think it would make more sense to generate those numbers outside of these functions
-runSimulation = function(nRuns = 2, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstMaxMin = c(10),lstFormula=c("~1"),lstMixtures=c(1),seed="NULL",strModel="Closed"){
+runSimulation = function(nRuns = 2, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstMaxMin = c(10),lstFormula=c("~1"),lstMixtures=c(1),seed=NULL,strModel="Closed"){
   
   # initialize variables
-  if(seed =="NULL"){
-    seed = NULL
-  }
   
   if(!is.null(seed)){
     set.seed(seed)
@@ -173,7 +167,7 @@ runSimulation = function(nRuns = 2, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlph
     # run the simulation multiple times for each parameter combo 
     for(sim in 1:nRuns){
       #specifically set seed to NULL here because I don't want the result of running a single simulation to be the same each time. The seed argument in the runSimulation() function is to save the final result
-      dfTemp = runSingleSimulation(N_i = temp_Ni,p_1m=temp_p,maxMinute=temp_min,alpha=temp_alpha,strFormula=temp_formula,strModel=strModel,nMixtures=temp_nMixtures,seed="NULL")
+      dfTemp = runSingleSimulation(N_i = temp_Ni,p_1m=temp_p,maxMinute=temp_min,alpha=temp_alpha,strFormula=temp_formula,strModel=strModel,nMixtures=temp_nMixtures,seed=NULL)
       dfTempEst = dfTemp[[1]] # dataframe of estimates
       dfTempParams = dfTemp[[2]] # dataframe of parameters used 
       dfHist = dfTemp[[3]] # dataframe of count history
@@ -209,7 +203,7 @@ runSimulation = function(nRuns = 2, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlph
   return(list(dfFinal, dfFinalHist)) 
 }
 
-calculateStatistics = function(nRuns = 2, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstMaxMin = c(10),lstFormula=c("~1"),lstMixtures=c(1),seed="NULL",strModel="Closed"){
+calculateStatistics = function(nRuns = 2, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstMaxMin = c(10),lstFormula=c("~1"),lstMixtures=c(1),seed=NULL,strModel="Closed"){
   # gather simulation results
   results = runSimulation(nRuns = nRuns,lstNi = lstNi, lstP = lstP, lstAlpha = lstAlpha, lstMaxMin = lstMaxMin,lstFormula = lstFormula, lstMixtures = lstMixtures, seed = seed, strModel = strModel)
   simData = results[[1]]
