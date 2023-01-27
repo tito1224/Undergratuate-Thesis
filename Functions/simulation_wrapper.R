@@ -20,12 +20,12 @@ simulation_wrapper = function(params){
   lstMixtures=params$lstMixtures
   lstSeed=params$lstSeed
   strModel=params$strModel
-  
+
   # run the simulation
   results = calculateStatistics(nRuns = nRuns[id], lstNi = lstNi[id], lstP = lstP[id], 
                       lstAlpha = lstAlpha[id], lstMaxMin = lstMaxMin[id],
                       lstFormula=lstFormula[id],lstMixtures=lstMixtures[id],
-                      seed=lstSeed[id],strModel=strModel[id])
+                      seed=as.character(lstSeed[id]),strModel=strModel[id])
   # return results
   return(results)
 }

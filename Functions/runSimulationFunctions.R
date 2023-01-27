@@ -92,7 +92,7 @@ runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",
   #}
   
   # need to have NULL input as a string
-  if(seed=="NULL"){
+  if(seed =="NULL"){
     seed = NULL
   }
   
@@ -140,7 +140,7 @@ runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",
 runSimulation = function(nRuns = 2, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstMaxMin = c(10),lstFormula=c("~1"),lstMixtures=c(1),seed="NULL",strModel="Closed"){
   
   # initialize variables
-  if(seed=="NULL"){
+  if(seed =="NULL"){
     seed = NULL
   }
   

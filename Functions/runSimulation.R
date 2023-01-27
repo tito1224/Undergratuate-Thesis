@@ -1,3 +1,6 @@
+# set MarkPath (only for running on supercomputer)
+MarkPath = "./project/6004325/oadebajo"
+
 ## Load packages
 library(tidyverse)
 library(RMark)
@@ -13,8 +16,8 @@ source("./Functions/simulation_wrapper.R")
 args = commandArgs(trailingOnly=TRUE)
 
 ## Set job number
-id = as.integer(args[1]) # what is this??
-#id = 1
+#id = as.integer(args[1]) # what is this??
+id = 1 # for testing this specific script.
 
 ## list parameters and make a dataframe out of it as inputs
 nRuns = 2
@@ -30,6 +33,7 @@ strModel = "Closed"
 params = expand.grid(nRuns,lstNi,lstP, lstAlpha, lstMaxMin,lstFormula,lstMixtures,lstSeed,strModel)
 colnames(params) = c("nRuns","lstNi","lstP","lstAlpha","lstMaxMin","lstFormula","lstMixtures","lstSeed","strModel")
 params$lstFormula = as.character(params$lstFormula) # for some reason this column turns into a factor variable?
+params$lstSeed = as.character(params$lstSeed) # for some reason i need to wrap this with as.character()
 
 # params = mutate(params, Scenario = row_number()) %>%
 #   crossing(Rep = 1:nRuns)
