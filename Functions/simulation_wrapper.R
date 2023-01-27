@@ -16,16 +16,24 @@ simulation_wrapper = function(params){
   lstP = params$lstP
   lstAlpha = params$lstAlpha
   lstMaxMin = params$lstMaxMin
-  lstFormula=params$lstFormula 
+  lstFormula=params$lstFormula
   lstMixtures=params$lstMixtures
   lstSeed=params$lstSeed
   strModel=params$strModel
-
+  print(lstNi)
+  print(lstNi[id])
+  
   # run the simulation
-  results = calculateStatistics(nRuns = nRuns[id], lstNi = lstNi[id], lstP = lstP[id], 
-                      lstAlpha = lstAlpha[id], lstMaxMin = lstMaxMin[id],
-                      lstFormula=lstFormula[id],lstMixtures=lstMixtures[id],
-                      seed=as.character(lstSeed[id]),strModel=strModel[id])
+  ## test if i can at least generate data
+  dfMarkInitial = generateDetects(lstNi[id],lstP[id],lstMaxMin[id])
+  dfMarkInitial = generateErrors(dfMarkInitial,lstAlpha[id]) # if alpha = 0, error data is the same as regular data (checked in previous .Rmd)
+  dfMark = detectsToCapHist(dfMarkInitial)[,"ch"] # for now combine all detections regardless of locationID 
+  
+  # results = calculateStatistics(nRuns = nRuns[id], lstNi = lstNi[id], lstP = lstP[id], 
+  #                     lstAlpha = lstAlpha[id], lstMaxMin = lstMaxMin[id],
+  #                     lstFormula=lstFormula[id],lstMixtures=lstMixtures[id],
+  #                     seed=as.character(lstSeed[id]),strModel=strModel[id])
   # return results
+  results = dfMark
   return(results)
 }

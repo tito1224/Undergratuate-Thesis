@@ -1,5 +1,6 @@
 # set MarkPath (only for running on supercomputer)
-MarkPath = "./project/6004325/oadebajo"
+#MarkPath = "./project/6004325/oadebajo"
+#MarkPath = "/project/6004325/oadebajo/mark.exe"
 
 ## Load packages
 library(tidyverse)
@@ -14,10 +15,12 @@ source("./Functions/simulation_wrapper.R")
 
 ## Read command line arguments
 args = commandArgs(trailingOnly=TRUE)
+print(args)
 
 ## Set job number
-#id = as.integer(args[1]) # what is this??
-id = 1 # for testing this specific script.
+id = as.integer(args[1]) # what is this??
+print(id)
+#id = 1 # for testing this specific script.
 
 ## list parameters and make a dataframe out of it as inputs
 nRuns = 2
@@ -34,19 +37,13 @@ params = expand.grid(nRuns,lstNi,lstP, lstAlpha, lstMaxMin,lstFormula,lstMixture
 colnames(params) = c("nRuns","lstNi","lstP","lstAlpha","lstMaxMin","lstFormula","lstMixtures","lstSeed","strModel")
 params$lstFormula = as.character(params$lstFormula) # for some reason this column turns into a factor variable?
 params$lstSeed = as.character(params$lstSeed) # for some reason i need to wrap this with as.character()
-
+print(params)
+print(params[id,])
 # params = mutate(params, Scenario = row_number()) %>%
 #   crossing(Rep = 1:nRuns)
 
 ## Run simulation with parameters from id row of parameter matrix
 results = simulation_wrapper(params[id,])
-
-
-# run the simulation
-# results = calculateStatistics(nRuns = nRuns, lstNi = lstNi, lstP = lstP, 
-#                               lstAlpha = lstAlpha, lstMaxMin = lstMaxMin,
-#                               lstFormula=lstFormula,lstMixtures=lstMixtures,
-#                               seed=lstSeed,strModel=strModel)
 
 # return results
 ## Save that number
