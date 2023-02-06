@@ -1,5 +1,5 @@
 # set MarkPath (only for running on supercomputer)
-MarkPath = "./home/oadebajo/projects/def-sbonner/oadebajo"
+MarkPath = "/project/6004325/oadebajo"
 
 ## Load packages
 library(tidyverse)
@@ -16,10 +16,10 @@ source("./Functions/simulation_wrapper.R")
 args = commandArgs(trailingOnly=TRUE)
 
 ## Set job number
-id = as.integer(args[1]) # what is this??
+id = as.integer(args[1]) 
 
 ## list parameters and make a dataframe out of it as inputs
-nRuns = 2
+nRuns = 20
 lstNi = c(20)
 lstP = c(0.1,0.2)
 lstAlpha =c(0.1)
@@ -33,8 +33,8 @@ params = expand.grid(nRuns,lstNi,lstP, lstAlpha, lstMaxMin,lstFormula,lstMixture
 colnames(params) = c("nRuns","lstNi","lstP","lstAlpha","lstMaxMin","lstFormula","lstMixtures","lstSeed","strModel")
 params$lstFormula = as.character(params$lstFormula) # for some reason this column turns into a factor variable?
 params$lstSeed = as.character(params$lstSeed) # for some reason i need to wrap this with as.character()
-print(params)
-print(params[id,])
+params$Scenario = 1:nrow(params)
+
 # params = mutate(params, Scenario = row_number()) %>%
 #   crossing(Rep = 1:nRuns)
 
@@ -43,5 +43,5 @@ results = simulation_wrapper(params[id,])
 
 # return results
 ## Save that number
-outfile = paste0("Output/output_",id,"_",".rds")
+outfile = paste0("Output/output_scenario",id,"_",".rds")
 saveRDS(results,outfile)
