@@ -104,7 +104,10 @@ runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",
   }
   
   # fit model
-  dfResults = fitModel(dfMark,strFormula,strModel,nMixtures = nMixtures)
+  # add tryCatch statement so it keeps running even if the model doesn't fit -> code -200 will show in the dataset to indicate this
+  tryCatch({
+    dfResults = fitModel(dfMark,strFormula,strModel,nMixtures = nMixtures)
+  },error=function(e){} )
   
   # conditional statement for when fitModel doesn't run (probably because no detections were made!)
   if(!exists("dfResults")){
