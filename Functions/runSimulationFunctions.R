@@ -57,7 +57,7 @@ generateFormula = function(){
 ## use the parameters to determine which formula and model to use
 #Q: use real or beta df? fitModel(dfMark, bC=TRUE,bTime=TRUE, bAdditive=TRUE) vs fitModel(dfMark, bC=TRUE,bTime=TRUE, bAdditive=FALSE)
 fitModel = function(ch,strFormula="~1",strModel="Closed",nMixtures=1){
-  
+  print("starting fit model")
   # fit the model 
   pformula = list(formula = eval(parse_expr(strFormula)),share=TRUE)
   model = mark(ch, model = strModel, model.parameters = list(p=pformula),delete=TRUE,output=FALSE,mixtures=nMixtures)
@@ -70,7 +70,7 @@ fitModel = function(ch,strFormula="~1",strModel="Closed",nMixtures=1){
   # get estimates of p, c (if applicable), se, lcl & ucl
   estP = model$results$real[,1:4]
   #estP = model$results$beta[,1:4]
-  estP = tibble::rownames_to_column(estP, "variable")
+  estP = tibble::rownames_to_column(as.data.frame(estP), "variable")
   dfEstimates = bind_rows(estP, dfPopulationEstimates)
   dfEstimates$AIC = intAIC
   
@@ -105,6 +105,28 @@ runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",
   
   # fit model
   dfResults = fitModel(dfMark,strFormula,strModel,nMixtures = nMixtures)
+  
+  # conditional statement for when fitModel doesn't run (probably because no detections were made!)
+  if(!exists("dfResults")){
+  dfResults = tibble(variable = c("p g1 t1","N"),
+                       estimate = c(-200,-200),
+                       se = c(NA,NA),
+                       lcl=c(NA,NA),
+                       ucl = c(NA,NA),
+                       AIC = c(NA,NA))
+  }
+  
+  # conditional statement to deal with situations where the fitmodel runs, has no ouput... idek how that's possible! :(
+  if(ncol(dfResults)==1){
+    dfResults = tibble(variable = c("p g1 t1","N"),
+                       estimate = c(-100,-100),
+                       se = c(NA,NA),
+                       lcl=c(NA,NA),
+                       ucl = c(NA,NA),
+                       AIC = c(NA,NA))
+  }
+  
+  print(dfResults)
   pResults = dfResults[1,]
   
   # if bMixture is used, the first p value is p_i not p_1
@@ -115,6 +137,7 @@ runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",
   
   NResults = filter(dfResults, variable == "N")
   # q: programMark has a "misidentification" feature --> explore more?
+
   tempdf = rbind(pResults,NResults)
     
   # make summarised dataframe
@@ -129,6 +152,7 @@ runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",
                         N = sum(N_i),
                         strFormula = strFormula, 
                         strModel = strModel)
+  print("single simulation success")
   return(list(dfOutput, dfParameters,dfMarkInitial))
 }
 
@@ -174,6 +198,10 @@ runSimulation = function(nRuns = 2, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlph
       dfTempEst = dfTemp[[1]] # dataframe of estimates
       dfTempParams = dfTemp[[2]] # dataframe of parameters used 
       dfHist = dfTemp[[3]] # dataframe of count history
+      
+      print(dfTempEst)
+      print(dfTempParams)
+      print(dfHist)
       
       # add conditional
       if(is.null(nrow(dfTempEst))){

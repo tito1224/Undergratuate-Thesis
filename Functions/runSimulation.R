@@ -1,5 +1,5 @@
 # set MarkPath (only for running on supercomputer)
-MarkPath = "/project/6004325/oadebajo"
+MarkPath = "/home/oadebajo/bin"
 
 ## Load packages
 library(tidyverse)
@@ -19,7 +19,7 @@ args = commandArgs(trailingOnly=TRUE)
 id = as.integer(args[1]) 
 
 ## list parameters and make a dataframe out of it as inputs
-nRuns = 20
+nRuns = 100
 lstNi = c(20)
 lstP = c(0.1,0.2)
 lstAlpha =c(0.1)
