@@ -23,15 +23,15 @@ simulation_wrapper = function(params){
   
   # run the simulation
   ## test if i can at least generate data
-  dfMarkInitial = generateDetects(lstNi,lstP,lstMaxMin)
-  dfMarkInitial = generateErrors(dfMarkInitial,lstAlpha) # if alpha = 0, error data is the same as regular data (checked in previous .Rmd)
-  dfMark = detectsToCapHist(dfMarkInitial)[,"ch"] # for now combine all detections regardless of locationID 
+  ###dfMarkInitial = generateDetects(lstNi,lstP,lstMaxMin)
+  ###dfMarkInitial = generateErrors(dfMarkInitial,lstAlpha) # if alpha = 0, error data is the same as regular data (checked in previous .Rmd)
+  ###dfMark = detectsToCapHist(dfMarkInitial)[,"ch"] # for now combine all detections regardless of locationID, issue in original code is the [id] in this part
   
-  # results = calculateStatistics(nRuns = nRuns[id], lstNi = lstNi[id], lstP = lstP[id], 
-  #                     lstAlpha = lstAlpha[id], lstMaxMin = lstMaxMin[id],
-  #                     lstFormula=lstFormula[id],lstMixtures=lstMixtures[id],
-  #                     seed=as.character(lstSeed[id]),strModel=strModel[id])
+  results = calculateStatistics(nRuns = nRuns, lstNi = lstNi, lstP = lstP,
+                      lstAlpha = lstAlpha, lstMaxMin = lstMaxMin,
+                      lstFormula=lstFormula,lstMixtures=lstMixtures,
+                      seed=as.character(lstSeed),strModel=strModel)
   # return results
-  results = dfMark
+  #results = dfMark
   return(results)
 }

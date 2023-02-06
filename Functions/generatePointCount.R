@@ -23,8 +23,12 @@ PredictProbability = function(m, p1m){
 generateDetects <- function(Ni,p_1m,maxMinute, seed = NULL){
   
   ## Set seed
-  if (!is.null(seed))
-    set.seed(seed)
+  if(!is.null(seed)){ # need to make it nested -> can't evaluate is.null() with another variable within the function...
+    if(seed!="NULL"){
+      set.seed(seed)
+      print("set seed") 
+    }
+  }
   
   ## Initialize data frame with location, individual, and occasion
   ## Locations with no individuals are removed
@@ -72,8 +76,12 @@ detectsToCapHist <- function(pcData, keepZeros = FALSE){
 generateMovement <- function(pcData, alpha, seed = NULL){
   
   ## Set seed
-  if (!is.null(seed))
-    set.seed(seed)
+  if(!is.null(seed)){ # need to make it nested -> can't evaluate is.null() with another variable within the function...
+    if(seed!="NULL"){
+      set.seed(seed)
+      print("set seed") 
+    }
+  }
   
   ## Simulate movements
   pcData <- pcData %>%

@@ -138,8 +138,11 @@ runSimulation = function(nRuns = 2, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlph
   
   # initialize variables
   
-  if(!is.null(seed)){
-    set.seed(seed)
+  if(!is.null(seed)){ # need to make it nested -> can't evaluate is.null() with another variable within the function...
+    if(seed!="NULL"){
+      set.seed(seed)
+      print("set seed") 
+    }
   }
   
   dfFinalEst =  matrix(0,0,0)

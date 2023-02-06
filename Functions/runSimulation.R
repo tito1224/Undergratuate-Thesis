@@ -1,6 +1,5 @@
 # set MarkPath (only for running on supercomputer)
-#MarkPath = "./project/6004325/oadebajo"
-#MarkPath = "/project/6004325/oadebajo/mark.exe"
+MarkPath = "./home/oadebajo/projects/def-sbonner/oadebajo"
 
 ## Load packages
 library(tidyverse)
@@ -15,12 +14,9 @@ source("./Functions/simulation_wrapper.R")
 
 ## Read command line arguments
 args = commandArgs(trailingOnly=TRUE)
-print(args)
 
 ## Set job number
 id = as.integer(args[1]) # what is this??
-print(id)
-#id = 1 # for testing this specific script.
 
 ## list parameters and make a dataframe out of it as inputs
 nRuns = 2
