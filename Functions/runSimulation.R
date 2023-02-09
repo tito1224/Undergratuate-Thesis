@@ -19,10 +19,10 @@ args = commandArgs(trailingOnly=TRUE)
 id = as.integer(args[1]) 
 
 ## list parameters and make a dataframe out of it as inputs
-nRuns = 200
-lstNi = c(100)
-lstP = c(0.1,0.2,0.3)
-lstAlpha =c(0.1,0.2,0.3)
+nRuns = 500
+lstNi = c(50)
+lstP = c(0.05,0.1,0.2,0.3)
+lstAlpha =c(0,0.05,0.1,0.2)
 lstMaxMin = c(5)
 lstFormula = c("~1")
 lstMixtures = c(1)

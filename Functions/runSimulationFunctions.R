@@ -161,7 +161,7 @@ runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",
 
 # function to automate outputs of the simulation
 # lstNi should ideally be generated using rnbinom() or rpois but I think it would make more sense to generate those numbers outside of these functions
-runSimulation = function(nRuns = 2, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstMaxMin = c(10),lstFormula=c("~1"),lstMixtures=c(1),seed=NULL,strModel="Closed"){
+runSimulation = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstMaxMin = c(10),lstFormula=c("~1"),lstMixtures=c(1),seed=NULL,strModel="Closed"){
   
   # initialize variables
   
@@ -237,15 +237,19 @@ runSimulation = function(nRuns = 2, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlph
   return(list(dfFinal, dfFinalHist)) 
 }
 
-calculateStatistics = function(nRuns = 2, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstMaxMin = c(10),lstFormula=c("~1"),lstMixtures=c(1),seed=NULL,strModel="Closed"){
+calculateStatistics = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstMaxMin = c(10),lstFormula=c("~1"),lstMixtures=c(1),seed=NULL,strModel="Closed"){
   # gather simulation results
   results = runSimulation(nRuns = nRuns,lstNi = lstNi, lstP = lstP, lstAlpha = lstAlpha, lstMaxMin = lstMaxMin,lstFormula = lstFormula, lstMixtures = lstMixtures, seed = seed, strModel = strModel)
   simData = results[[1]]
   dfHist = results[[2]]
   
-  # filter out cases that did not run 
+  # store original data
+  simDataTrue = simData
+  
+  # filter out cases that did not run
   simData = simData %>%
-    filter(estimate>=0)
+    filter(estimate>=0)%>%
+    filter(estimate < 200) # filter out weird estimates
   
   # find summary stats
   # notes: coverage probability isthe proportion of confidence intervals that capture the true population parameter 
@@ -266,5 +270,5 @@ calculateStatistics = function(nRuns = 2, lstNi = c(10,20), lstP = c(0.1,0.5), l
               avgWidth = mean(width,na.rm=TRUE),
               avgAIC = mean(AIC,na.rm=TRUE))
   dfSummaryStats = dfSummaryStats[!duplicated(dfSummaryStats),]
-  return(list(dfSummaryStats, simData, dfHist))
+  return(list(dfSummaryStats, simDataTrue, dfHist))
 }
