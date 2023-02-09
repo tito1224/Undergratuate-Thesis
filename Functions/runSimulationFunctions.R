@@ -243,6 +243,10 @@ calculateStatistics = function(nRuns = 2, lstNi = c(10,20), lstP = c(0.1,0.5), l
   simData = results[[1]]
   dfHist = results[[2]]
   
+  # filter out cases that did not run 
+  simData = simData %>%
+    filter(estimate>=0)
+  
   # find summary stats
   # notes: coverage probability isthe proportion of confidence intervals that capture the true population parameter 
   simData$bCoverage = ifelse(simData$trueValue >= simData$lcl & simData$trueValue <= simData$ucl,1,0)
@@ -252,15 +256,15 @@ calculateStatistics = function(nRuns = 2, lstNi = c(10,20), lstP = c(0.1,0.5), l
   dfSummaryStats = simData %>%
     filter(variable == "N")%>% # only focus on N? or also use p??
     group_by(p_1m,alpha,N,maxMinute,strFormula,combinationNumber)%>%
-    summarise(AvgNhat = mean(estimate),
-              AvgNhatSE= mean(se),
-              sdNhat = sd(estimate),
+    summarise(AvgNhat = mean(estimate,na.rm=TRUE),
+              AvgNhatSE= mean(se,na.rm=TRUE),
+              sdNhat = sd(estimate,na.rm=TRUE),
               biasNhat = AvgNhat - N,
-              mse = mean(squaredError),
+              mse = mean(squaredError,na.rm=TRUE),
               bias_SE_Nhat = AvgNhatSE - sdNhat,
-              coverage = sum(bCoverage)/n(),
-              avgWidth = mean(width),
-              avgAIC = mean(AIC))
+              coverage = sum(bCoverage,na.rm=TRUE)/sum(!is.na(estimate)), # changed this from n() to sum(!is.na()) because I have some NA values for my estimates
+              avgWidth = mean(width,na.rm=TRUE),
+              avgAIC = mean(AIC,na.rm=TRUE))
   dfSummaryStats = dfSummaryStats[!duplicated(dfSummaryStats),]
   return(list(dfSummaryStats, simData, dfHist))
 }
