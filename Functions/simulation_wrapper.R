@@ -20,6 +20,7 @@ simulation_wrapper = function(params){
   lstMixtures=params$lstMixtures
   lstSeed=params$lstSeed
   strModel=params$strModel
+  nScenario = params$Scenario
   
   # run the simulation
   ## test if i can at least generate data
@@ -30,7 +31,7 @@ simulation_wrapper = function(params){
   results = calculateStatistics(nRuns = nRuns, lstNi = lstNi, lstP = lstP,
                       lstAlpha = lstAlpha, lstMaxMin = lstMaxMin,
                       lstFormula=lstFormula,lstMixtures=lstMixtures,
-                      seed=as.character(lstSeed),strModel=strModel)
+                      seed=as.character(lstSeed),strModel=strModel,nScenario = nScenario)
   # return results
   #results = dfMark
   return(results)

@@ -19,10 +19,21 @@ args = commandArgs(trailingOnly=TRUE)
 id = as.integer(args[1]) 
 
 ## list parameters and make a dataframe out of it as inputs
+## this requires 8G
+# nRuns = 500
+# lstNi = c(50)
+# lstP = c(0.05,0.1,0.2,0.3)
+# lstAlpha =c(0,0.05,0.1,0.2)
+# lstMaxMin = c(5)
+# lstFormula = c("~1")
+# lstMixtures = c(1)
+# lstSeed = c("NULL")
+# strModel = "Closed"
+
 nRuns = 500
 lstNi = c(50)
-lstP = c(0.05,0.1,0.2,0.3)
-lstAlpha =c(0,0.05,0.1,0.2)
+lstP = c(0.3)
+lstAlpha =c(0.2)
 lstMaxMin = c(5)
 lstFormula = c("~1")
 lstMixtures = c(1)

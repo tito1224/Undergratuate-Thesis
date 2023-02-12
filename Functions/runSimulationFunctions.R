@@ -97,11 +97,12 @@ runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",
   dfMarkInitial = generateDetects(N_i,p_1m,maxMinute,seed)
   dfMarkInitial = generateErrors(dfMarkInitial,alpha,seed) # if alpha = 0, error data is the same as regular data (checked in previous .Rmd)
   dfMark = detectsToCapHist(dfMarkInitial)[,"ch"] # for now combine all detections regardless of locationID 
+  dfHistOutput = detectsToCapHist(dfMarkInitial)
   
   # add conditional for if no individuals are detected 
-  if(nrow(dfMark)==0){
-    return(list(NA,NA))
-  }
+  # if(nrow(dfMark)==0){
+  #   return(list(NA,NA))
+  # }
   
   # fit model
   # add tryCatch statement so it keeps running even if the model doesn't fit -> code -200 will show in the dataset to indicate this
@@ -109,7 +110,7 @@ runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",
     dfResults = fitModel(dfMark,strFormula,strModel,nMixtures = nMixtures)
   },error=function(e){} )
   
-  # conditional statement for when fitModel doesn't run (probably because no detections were made!)
+  # conditional statement for when fitModel doesn't run (probably because detection data is too sparse!)
   if(!exists("dfResults")){
   dfResults = tibble(variable = c("p g1 t1","N"),
                        estimate = c(-200,-200),
@@ -129,13 +130,18 @@ runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",
                        AIC = c(NA,NA))
   }
   
-  print(dfResults)
+  #print(dfResults)
   pResults = dfResults[1,]
   
   # if bMixture is used, the first p value is p_i not p_1
   # code below gives us probability of detection if you belong in group 1
   if(strModel!="Closed"){
-    pResults = dfResults[2,]
+    if(nrow(dfResults)==1){
+      pResults = dfResults[1,]
+    } else {
+      pResults = dfResults[2,] 
+    }
+   
   }
   
   NResults = filter(dfResults, variable == "N")
@@ -156,12 +162,12 @@ runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",
                         strFormula = strFormula, 
                         strModel = strModel)
   print("single simulation success")
-  return(list(dfOutput, dfParameters,dfMarkInitial))
+  return(list(dfOutput, dfParameters,dfHistOutput))
 }
 
 # function to automate outputs of the simulation
 # lstNi should ideally be generated using rnbinom() or rpois but I think it would make more sense to generate those numbers outside of these functions
-runSimulation = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstMaxMin = c(10),lstFormula=c("~1"),lstMixtures=c(1),seed=NULL,strModel="Closed"){
+runSimulation = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstMaxMin = c(10),lstFormula=c("~1"),lstMixtures=c(1),seed=NULL,strModel="Closed",nScenario=NULL){
   
   # initialize variables
   
@@ -172,7 +178,7 @@ runSimulation = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlph
     }
   }
   
-  dfFinalEst =  matrix(0,0,0)
+  dfFinalEst =  matrix(0,0,0) # store estimates
   dfFinalParams = matrix(0,0,0) # so that if we see any weird numbers, we can use the runSingleSimulation() function to investigate
   dfFinalHist = data.frame() # store capture history
   dfCombinations = expand.grid(lstNi,lstP, lstAlpha, lstMaxMin,lstFormula,lstMixtures)
@@ -183,7 +189,12 @@ runSimulation = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlph
   simulationNumber = 1
   
   # combination counter -> keep track of how many times the combination has run
-  combinationNumber = 1
+  
+  if(!is.null(nScenario)){
+    combinationNumber = nScenario
+  } else {
+    combinationNumber = 1 
+  }
   
   # grab parameter values
   for(row in 1:nrow(dfCombinations)){
@@ -207,13 +218,14 @@ runSimulation = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlph
       print(dfHist)
       
       # add conditional
-      if(is.null(nrow(dfTempEst))){
-        next()
-      }
+      #if(is.null(nrow(dfTempEst))){
+      #  next()
+      #}
       
       # add extra variables to track simulation number
       dfTempEst$combinationNumber = combinationNumber
       dfHist$combinationNumber = combinationNumber
+      dfTempParams$combinationNumber = combinationNumber
       
       dfTempEst$simulationNumber = simulationNumber
       dfTempParams$simulationNumber = simulationNumber
@@ -233,13 +245,13 @@ runSimulation = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlph
   }
   
   # merge dataframes
-  dfFinal = left_join(dfFinalEst, dfFinalParams, by="simulationNumber")
+  dfFinal = left_join(dfFinalEst, dfFinalParams, by=c("combinationNumber","simulationNumber")) # i was only joining by simulationNumber before and that's why im having issues with tracing
   return(list(dfFinal, dfFinalHist)) 
 }
 
-calculateStatistics = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstMaxMin = c(10),lstFormula=c("~1"),lstMixtures=c(1),seed=NULL,strModel="Closed"){
+calculateStatistics = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstMaxMin = c(10),lstFormula=c("~1"),lstMixtures=c(1),seed=NULL,strModel="Closed",nScenario=NULL){
   # gather simulation results
-  results = runSimulation(nRuns = nRuns,lstNi = lstNi, lstP = lstP, lstAlpha = lstAlpha, lstMaxMin = lstMaxMin,lstFormula = lstFormula, lstMixtures = lstMixtures, seed = seed, strModel = strModel)
+  results = runSimulation(nRuns = nRuns,lstNi = lstNi, lstP = lstP, lstAlpha = lstAlpha, lstMaxMin = lstMaxMin,lstFormula = lstFormula, lstMixtures = lstMixtures, seed = seed, strModel = strModel,nScenario=nScenario)
   simData = results[[1]]
   dfHist = results[[2]]
   
@@ -252,7 +264,7 @@ calculateStatistics = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), l
     filter(estimate < 200) # filter out weird estimates
   
   # find summary stats
-  # notes: coverage probability isthe proportion of confidence intervals that capture the true population parameter 
+  # notes: coverage probability is the proportion of confidence intervals that capture the true population parameter 
   simData$bCoverage = ifelse(simData$trueValue >= simData$lcl & simData$trueValue <= simData$ucl,1,0)
   simData$squaredError = (simData$estimate - simData$trueValues)^2
   simData$width = simData$ucl - simData$lcl
