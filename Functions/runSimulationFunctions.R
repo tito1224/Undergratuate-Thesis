@@ -213,10 +213,6 @@ runSimulation = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlph
       dfTempParams = dfTemp[[2]] # dataframe of parameters used 
       dfHist = dfTemp[[3]] # dataframe of count history
       
-      print(dfTempEst)
-      print(dfTempParams)
-      print(dfHist)
-      
       # add conditional
       #if(is.null(nrow(dfTempEst))){
       #  next()
@@ -227,12 +223,16 @@ runSimulation = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlph
       dfHist$combinationNumber = combinationNumber
       dfTempParams$combinationNumber = combinationNumber
       
-      dfTempEst$simulationNumber = simulationNumber
-      dfTempParams$simulationNumber = simulationNumber
-      dfHist$simulationNumber = simulationNumber
+      dfTempEst$simulationNumber = sim
+      dfTempParams$simulationNumber = sim
+      dfHist$simulationNumber = sim
       
       dfHist$seed = seed
       dfTempParams$seed = seed
+      
+      print(dfTempEst)
+      print(dfTempParams)
+      print(dfHist)
       
       dfFinalEst = rbind(dfFinalEst,dfTempEst)
       dfFinalParams = rbind(dfFinalParams,dfTempParams)
@@ -245,8 +245,8 @@ runSimulation = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlph
   }
   
   # merge dataframes
-  dfFinal = left_join(dfFinalEst, dfFinalParams, by=c("combinationNumber","simulationNumber")) # i was only joining by simulationNumber before and that's why im having issues with tracing
-  return(list(dfFinal, dfFinalHist)) 
+  dfFinal = left_join(dfFinalEst, dfFinalParams, by=c("combinationNumber","simulationNumber")) 
+  return(list(dfFinal, dfFinalHist,dfFinalEst)) 
 }
 
 calculateStatistics = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstMaxMin = c(10),lstFormula=c("~1"),lstMixtures=c(1),seed=NULL,strModel="Closed",nScenario=NULL){
@@ -256,7 +256,8 @@ calculateStatistics = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), l
   dfHist = results[[2]]
   
   # store original data
-  simDataTrue = simData
+  #simDataTrue = simData
+  simDataTrue = results[[3]]
   
   # filter out cases that did not run
   simData = simData %>%
