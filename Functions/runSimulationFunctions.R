@@ -62,6 +62,10 @@ fitModel = function(ch,strFormula="~1",strModel="Closed",nMixtures=1){
   pformula = list(formula = eval(parse_expr(strFormula)),share=TRUE)
   model = mark(ch, model = strModel, model.parameters = list(p=pformula),delete=TRUE,output=FALSE,mixtures=nMixtures)
   
+  # find the number of unique encounter histories in the data
+  markEncounterHistory = model$results$deviance.df + 2 # double check that this is how df is calculated (# unique histories - 2)
+  dataEncounterHistory = nrow(unique(ch))
+  
   # extract relevant variables - estimate, se, ul, cl, aic
   dfPopulationEstimates = model$results$derived$`N Population Size`
   dfPopulationEstimates$variable = "N"
@@ -73,6 +77,8 @@ fitModel = function(ch,strFormula="~1",strModel="Closed",nMixtures=1){
   estP = tibble::rownames_to_column(as.data.frame(estP), "variable")
   dfEstimates = bind_rows(estP, dfPopulationEstimates)
   dfEstimates$AIC = intAIC
+  dfEstimates$MarkEncounters = markEncounterHistory
+  dfEstimates$DataEncounters = dataEncounterHistory
   
   # clean data 
   dfEstimates = filter(dfEstimates,!str_detect(variable,"f0"))
@@ -117,7 +123,9 @@ runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",
                        se = c(NA,NA),
                        lcl=c(NA,NA),
                        ucl = c(NA,NA),
-                       AIC = c(NA,NA))
+                       AIC = c(NA,NA),
+                       MarkEncounters = c(0,0),
+                       DataEncounters = c(0,0))
   }
   
   # conditional statement to deal with situations where the fitmodel runs, has no ouput... idek how that's possible! :(
@@ -127,8 +135,17 @@ runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",
                        se = c(NA,NA),
                        lcl=c(NA,NA),
                        ucl = c(NA,NA),
-                       AIC = c(NA,NA))
+                       AIC = c(NA,NA),
+                       MarkEncounters = c(0,0),
+                       DataEncounters = c(0,0))
   }
+  
+  
+  # check for a mismatch in encounter histories
+  # if((dfResults$MarkEncounters[1] != dfResults$DataEncounters[1])){
+  #   print("mis matched encounter histories")
+  #   dfResults$estimate = -300
+  # }
   
   #print(dfResults)
   pResults = dfResults[1,]
@@ -178,8 +195,8 @@ runSimulation = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlph
     }
   }
   
-  dfFinalEst =  matrix(0,0,0) # store estimates
-  dfFinalParams = matrix(0,0,0) # so that if we see any weird numbers, we can use the runSingleSimulation() function to investigate
+  dfFinalEst =  data.frame() # store estimates
+  dfFinalParams = data.frame() # so that if we see any weird numbers, we can use the runSingleSimulation() function to investigate
   dfFinalHist = data.frame() # store capture history
   dfCombinations = expand.grid(lstNi,lstP, lstAlpha, lstMaxMin,lstFormula,lstMixtures)
   colnames(dfCombinations) = c("Ni","P","Alpha","MaxMin","Formula","nMixtures")
@@ -230,9 +247,9 @@ runSimulation = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlph
       dfHist$seed = seed
       dfTempParams$seed = seed
       
-      print(dfTempEst)
-      print(dfTempParams)
-      print(dfHist)
+      print(data.frame(dfTempEst))
+      print(data.frame(dfTempParams))
+      print(data.frame(dfHist))
       
       dfFinalEst = rbind(dfFinalEst,dfTempEst)
       dfFinalParams = rbind(dfFinalParams,dfTempParams)
@@ -259,10 +276,12 @@ calculateStatistics = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), l
   #simDataTrue = simData
   simDataTrue = results[[3]]
   
-  # filter out cases that did not run
+  # filter out cases that did not run and weird estimates
   simData = simData %>%
     filter(estimate>=0)%>%
-    filter(estimate < 200) # filter out weird estimates
+    filter(estimate < 200) %>%
+    filter(MarkEncounters==DataEncounters)
+  
   
   # find summary stats
   # notes: coverage probability is the proportion of confidence intervals that capture the true population parameter 
