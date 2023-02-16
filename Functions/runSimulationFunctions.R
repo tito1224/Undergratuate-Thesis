@@ -56,11 +56,11 @@ generateFormula = function(){
 ## assuming we have the data, fit the model, with necessary specifications
 ## use the parameters to determine which formula and model to use
 #Q: use real or beta df? fitModel(dfMark, bC=TRUE,bTime=TRUE, bAdditive=TRUE) vs fitModel(dfMark, bC=TRUE,bTime=TRUE, bAdditive=FALSE)
-fitModel = function(ch,strFormula="~1",strModel="Closed",nMixtures=1){
+fitModel = function(ch,strFormula="~1",strModel="Closed",nMixtures=1,scenarioSimNum=40){
   print("starting fit model")
   # fit the model 
   pformula = list(formula = eval(parse_expr(strFormula)),share=TRUE)
-  model = mark(ch, model = strModel, model.parameters = list(p=pformula),delete=TRUE,output=FALSE,mixtures=nMixtures)
+  model = mark(ch, model = strModel, model.parameters = list(p=pformula),prefix=scenarioSimNum,delete=FALSE,output=FALSE,mixtures=nMixtures)
   
   # find the number of unique encounter histories in the data
   markEncounterHistory = model$results$deviance.df + 2 # double check that this is how df is calculated (# unique histories - 2)
@@ -86,7 +86,7 @@ fitModel = function(ch,strFormula="~1",strModel="Closed",nMixtures=1){
   return(dfEstimates)
 }
 
-runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",strModel="Closed",nMixtures=1,seed = NULL){
+runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",strModel="Closed",nMixtures=1,seed = NULL,scenarioSimNum=40){
   # generate regular data
   #locationID = 1:n_locations
   #N_i = rpois(n_locations,lambda)
@@ -113,7 +113,7 @@ runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",
   # fit model
   # add tryCatch statement so it keeps running even if the model doesn't fit -> code -200 will show in the dataset to indicate this
   tryCatch({
-    dfResults = fitModel(dfMark,strFormula,strModel,nMixtures = nMixtures)
+    dfResults = fitModel(dfMark,strFormula,strModel,nMixtures = nMixtures,scenarioSimNum=scenarioSimNum)
   },error=function(e){} )
   
   # conditional statement for when fitModel doesn't run (probably because detection data is too sparse!)
@@ -224,8 +224,12 @@ runSimulation = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlph
     
     # run the simulation multiple times for each parameter combo 
     for(sim in 1:nRuns){
+      # make a unique id for the scenario_simulation number to name the output file
+      # prevents confusion of output when mark is being run in parallel 
+      scenarioSimNum = paste("scenario",combinationNumber,"_",sim,"_", sep = "")
+      
       #specifically set seed to NULL here because I don't want the result of running a single simulation to be the same each time. The seed argument in the runSimulation() function is to save the final result
-      dfTemp = runSingleSimulation(N_i = temp_Ni,p_1m=temp_p,maxMinute=temp_min,alpha=temp_alpha,strFormula=temp_formula,strModel=strModel,nMixtures=temp_nMixtures,seed=NULL)
+      dfTemp = runSingleSimulation(N_i = temp_Ni,p_1m=temp_p,maxMinute=temp_min,alpha=temp_alpha,strFormula=temp_formula,strModel=strModel,nMixtures=temp_nMixtures,seed=NULL, scenarioSimNum = scenarioSimNum)
       dfTempEst = dfTemp[[1]] # dataframe of estimates
       dfTempParams = dfTemp[[2]] # dataframe of parameters used 
       dfHist = dfTemp[[3]] # dataframe of count history
@@ -279,7 +283,7 @@ calculateStatistics = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), l
   # filter out cases that did not run and weird estimates
   simData = simData %>%
     filter(estimate>=0)%>%
-    filter(estimate < 200) %>%
+    filter(estimate < 1000) %>%
     filter(MarkEncounters==DataEncounters)
   
   
