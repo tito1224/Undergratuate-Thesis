@@ -1,0 +1,425 @@
+---
+title: "Simulation Results Trial Five"
+author: "Tito"
+date: "2023-02-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load Results
+
+```{r}
+library(tidyverse)
+library(gtools)
+library(data.table)
+library(matrixStats)
+library(RMark)
+library(stringi)
+library(rlang)
+```
+
+
+```{r}
+setwd("~/Rcode/Undergratuate-Thesis")
+source("./Functions/generatePointCount.R")
+source("./Functions/runSimulationFunctions.R")
+```
+
+
+
+```{r}
+#setwd("~/Rcode/Undergratuate-Thesis/DigitalAllianceOutput/Trial Five")
+setwd("~/Rcode/Undergratuate-Thesis/DigitalAllianceOutput/Final")
+dataTrialFive = list.files(pattern = ".rds")
+dataTrialFive = mixedsort(dataTrialFive)%>% # use mixedsort so it appears in ascending order 
+  map(readRDS)
+```
+
+
+```{r}
+dfSummarisedFinal= data.frame()
+dfEstimatesFinal = data.frame()
+dfHistoryFinal = data.frame()
+#counter = 1
+for (item in dataTrialFive){
+  tempSummarisedResults = item[[1]] # retrieve the summary stats
+  tempCalculations = item[[2]]
+  tempHistory= item[[3]]
+  #tempSummarisedResults$id = counter
+  #tempCalculations$id = counter
+  #tempHistory$id = counter
+  
+  
+  dfSummarisedFinal = rbind(dfSummarisedFinal,tempSummarisedResults)
+  dfEstimatesFinal = rbind(dfEstimatesFinal, tempCalculations)
+  dfHistoryFinal = rbind(dfHistoryFinal, tempHistory)
+  #counter = counter + 1
+}
+
+```
+
+
+# Outliers
+
+Find outlier values
+```{r}
+# id is combinationNumber_simulationNumber
+dfEstimatesFinal$rowid = 1:nrow(dfEstimatesFinal)
+dfEstimatesFinal$id = paste0(dfEstimatesFinal$combinationNumber,"_",dfEstimatesFinal$simulationNumber)
+dfHistoryFinal$id = paste0(dfHistoryFinal$combinationNumber,"_",dfHistoryFinal$simulationNumber)
+
+dfEstimatesFinalUnClean = copy(dfEstimatesFinal)
+```
+
+5 cases did not run because no detections were made, which is fair.
+```{r}
+dfOutliers = dfEstimatesFinalUnClean %>%
+  filter(variable == "N") %>%
+  filter(estimate < 0 | is.na(estimate))
+nOutliers = nrow(dfOutliers)
+nEstimates = nrow(dfEstimatesFinalUnClean[which(dfEstimatesFinalUnClean$variable=="N"),])
+print(nOutliers)
+print(nEstimates)
+print(nOutliers/nEstimates)
+dfOutliers
+```
+
+```{r}
+dfHistoryFinal%>%
+  filter(combinationNumber==1 & simulationNumber==93)
+
+# i am assuming the detection history was split so much that nothing was detected because a detectionhistory dataframe is not being returned
+```
+
+## Find Single Detections
+
+This tells us that in 94% of the scenarios generated, at least one individual was detected more than once. 
+```{r}
+colnamesUse= paste0("Minute",1:10)
+dfHistoryFinal$counts = rowSums(dfHistoryFinal[,colnamesUse],na.rm=TRUE)
+dfHistoryFinal$bCounts = ifelse(dfHistoryFinal$counts > 1,">1","=1")
+
+# find out for each id (scenario_simulationNumber) how many individuals were counted only once and how many were recaptured
+nMultDetect = dfHistoryFinal %>%
+  filter(counts>1)
+nMultDetect = length(unique(nMultDetect$id))
+nMultDetect
+nMultDetect/nEstimates
+```
+
+Doing this just to make sure I'm filtering data right
+```{r}
+nMultDetect = dfHistoryFinal %>%
+  filter(counts>1)
+
+nSingleDetection = dfHistoryFinal %>%
+  filter(counts==1 & !(id %in% nMultDetect$id))
+
+nSingleDetection = length(unique(nSingleDetection$id))
+nSingleDetection
+nSingleDetection/nEstimates
+```
+
+```{r}
+dfMultDetect = dfHistoryFinal %>%
+  filter(counts>1)
+
+dfSingleDetection = dfHistoryFinal %>%
+  filter(counts==1 & !(id %in% dfMultDetect$id))
+```
+
+
+## Incorrect Estimates
+
+Find values where unique encounter histories in given by mark does not match unique encounter histories in data
+```{r}
+dfMisMatch = dfEstimatesFinalUnClean %>%
+  filter(variable == "N") %>%
+  filter(MarkEncounters != DataEncounters)
+nMisMatch = nrow(dfMisMatch)
+print(nMisMatch)
+print(nMisMatch/nEstimates)
+```
+
+
+See if I can find incorrect estimates
+```{r}
+dfMisMatch$Difference = dfMisMatch$MarkEncounters - dfMisMatch$DataEncounters
+head(dfMisMatch%>%
+       filter(!is.na(estimate))%>%
+       arrange(desc(Difference)))%>%
+  select(trueValues, variable, estimate, MarkEncounters, DataEncounters, combinationNumber, simulationNumber, Difference)
+```
+
+
+```{r}
+test = dfHistoryFinal %>%
+  filter(combinationNumber==51 & simulationNumber == 337) 
+test
+nrow(unique(test[,"ch"])) # unique encounter histories
+```
+
+
+
+
+```{r}
+ch = test[,"ch"]
+fitModel(ch)
+```
+
+Figure out which cases have only one count - 40% of the mis matching cases have only one detection so we would have removed it anyways
+```{r}
+nSingleMisMatch = nrow(dfMisMatch %>%
+  filter(id %in% dfSingleDetection$id))
+print(nSingleMisMatch/nrow(dfMisMatch))
+
+# add for filtering later 
+# dfSingleMisMatch = dfMisMatch %>%
+#   filter(id %in% dfSingleDetection$id)
+```
+
+Figure out which cases have more than one count
+```{r}
+nMultMisMatch = nrow(dfMisMatch %>%
+  filter(id %in% dfMultDetect$id))
+nMultMisMatch/nrow(dfMisMatch)
+
+dfMultMisMatch = dfMisMatch %>%
+  filter(id %in% dfMultDetect$id)
+head(dfMultMisMatch)
+```
+
+```{r}
+dfEstimatesFinalUnClean%>%
+  filter(combinationNumber==5 & simulationNumber == 131)
+test = dfHistoryFinal %>%
+  filter(combinationNumber==5 & simulationNumber == 131) 
+test
+nrow(unique(test[,"ch"]))
+ch = test[,"ch"]
+fitModel(ch)
+```
+
+
+
+# Clean Data
+
+```{r}
+# filter out cases that did not run
+# dfEstimatesFinal = dfEstimatesFinal %>%
+#   filter(estimate>=0 & estimate < 200 & !is.na(estimate))
+
+# filter out mismatching unique encounter histories
+dfEstimatesFinal = dfEstimatesFinalUnClean %>%
+  filter(variable == "N") %>%
+  filter(estimate>=0) %>%
+  filter(!(id %in% dfSingleDetection$id))#%>%
+  #filter(!(id %in% dfMisMatch$id))
+```
+
+Total outliers make up appx 10% of the data if we include mis matches and 6% of the data if we do not include mismatches
+```{r}
+1 - (nrow(dfEstimatesFinal)/nEstimates)
+```
+
+```{r}
+#add p,alpha,N, etc
+dfEstimatesFinal = left_join(dfEstimatesFinal, dfSummarisedFinal[,1:6], by= "combinationNumber")
+```
+
+```{r}
+head(dfEstimatesFinal)
+```
+
+
+Make sure there are approximately equal data points across all scenarios. The scenarios with less than 500 data points by a significant amount are the ones with lowest detection probability and high alpha and/or low N. Makes sense because we end up with more cases of single detections here. 
+```{r}
+dfEstimatesFinal %>%
+  filter(variable == "N")%>%
+  group_by(p_1m,alpha,N,maxMinute,combinationNumber)%>%
+  summarise(Count= n())%>%
+  arrange(Count)
+```
+
+
+# Plots
+
+## Population 20
+```{r}
+dfEstimatesPop = dfEstimatesFinal %>%
+  filter(N==20)
+```
+
+Make sure they all have around the same data points - 300+ data points per scenario.
+```{r}
+dfEstimatesPop %>%
+  filter(variable == "N")%>%
+  group_by(p_1m,alpha,N,maxMinute,combinationNumber)%>%
+  summarise(Count= n())%>%
+  arrange(Count)
+
+```
+
+
+
+
+Looking at how estimates varies as alpha increases when p_1m is fixed and time is fixed.
+
+- When the time interval is 5 mins, and detection probability is low, our estimates are closer to the true value in general; Even when we have a higher alpha, the shift in median estimate isn't as pronounced compared to when time = 10. This makes sense as small occasions means we have less time to make more mistakes, and small detection probability means we have detected less individuals to make mistakes on. 
+
+- when alpha is 0.05, and time = 5, we have pretty accurate results, no matter how high p1m is. 
+
+- With both time = 5 and time = 10, I notice that the IQR when alpha is high becomes smaller. **Why should this be the case?**
+
+- When time = 5, not much of a difference in median estimate for alpha =0.2 when p is 0.2 vs when p = 0.3. The marked difference is in the spread of values
+
+- When time = 10, why are the worst estimates when p = 0.1 and alpha= 0.2? Shouldn't the worst estimates be when p = 0.3 and alpha is 0.2?
+  - Actually because we have a small p and high alpha, we have a higher occurence of more single detections, which lower our detection probability and increase the estimate of N. This is why we see more outliers for this scenario. When detection probability increases, then we that IQR decrease
+
+- Another interesting observation is that when time = 10, the median estimate is the same for each value of alpha, no matter what the p value is. But once again, that IQR tightens up as the p increases
+- a small probability of errors already skyrockets the estimates --> even when we only have five capture occasions.
+
+
+```{r}
+dfEstimatesPop %>%
+ggplot()+
+  geom_boxplot(aes(x=as.factor(p_1m), y = estimate, fill = as.factor(alpha)))+ 
+  geom_hline(aes(yintercept = trueValues),color = "darkred")+
+  labs(title = "Population Estimates Facetted by Time", subtitle = "20 Individuals in Population. 5 and 10 Minute Facet Times.")+
+  facet_wrap(~maxMinute)+ 
+  scale_fill_discrete(name = "Alpha")+ 
+  labs(x= "1 Min Detection Probability (p_1m)",y = "Estimate")+
+  theme_classic()
+```
+
+
+
+```{r}
+dfEstimatesFinal %>%
+  filter(N==10) %>%
+ggplot()+
+  geom_boxplot(aes(x=as.factor(p_1m), y = estimate, fill = as.factor(alpha)))+ 
+  geom_hline(aes(yintercept = trueValues),color = "darkred")+
+  labs(title = "Population Estimates Facetted by Time", subtitle = "10 Individuals in Population. 5 and 10 Minute Facet Times.")+
+  facet_wrap(~maxMinute)+ 
+  scale_fill_discrete(name = "Alpha")+ 
+  labs(x= "1 Min Detection Probability (p_1m)",y = "Estimate")+
+  theme_classic()
+```
+
+# Tables
+
+```{r}
+dfEstimatesFinal$bCoverage = ifelse(dfEstimatesFinal$trueValue >= dfEstimatesFinal$lcl & dfEstimatesFinal$trueValue <= dfEstimatesFinal$ucl,1,0)
+dfEstimatesFinal$squaredError = (dfEstimatesFinal$estimate - dfEstimatesFinal$trueValues)^2
+dfEstimatesFinal$width = dfEstimatesFinal$ucl - dfEstimatesFinal$lcl
+  
+dfSummaryStats = dfEstimatesFinal %>%
+    filter(variable == "N")%>% # only focus on N? or also use p??
+    group_by(p_1m,alpha,N,maxMinute,combinationNumber)%>%
+    summarise(AvgNhat = mean(estimate,na.rm=TRUE),
+              AvgNhatSE= mean(se,na.rm=TRUE),
+              sdNhat = sd(estimate,na.rm=TRUE),
+              biasNhat = AvgNhat - N,
+              mse = mean(squaredError,na.rm=TRUE),
+              bias_SE_Nhat = AvgNhatSE - sdNhat,
+              coverage = sum(bCoverage,na.rm=TRUE)/sum(!is.na(estimate)), # changed this from n() to sum(!is.na()) because I have some NA values for my estimates
+              avgWidth = mean(width,na.rm=TRUE),
+              avgAIC = mean(AIC,na.rm=TRUE))
+dfSummaryStats = dfSummaryStats[!duplicated(dfSummaryStats),]
+dfSummaryStats
+```
+
+
+## Plots on Table
+
+
+The order of the average n values is as expected - as alpha increases, estimates of n should increase. I'm curious about the trend though. Namely, shouldn't the average n always be increasing as we increase p? Or at least kind of stabilize. When time = 5 I see this, but when time = 10, I'm confused about it. 
+
+- **Can I attribute these downward movements to just randomized data points**
+```{r}
+dfSummaryStats %>%
+  filter(N==20)%>%
+ggplot(aes(x=p_1m, y = AvgNhat, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~maxMinute)+
+  theme_light()+ 
+  labs(title  = "Average Population Estimates", subtitle = "N = 20",x= "1 Min Detection Probability (p_1m)",y = "Average N Estimate")+
+  scale_color_discrete(name = "Alpha")
+```
+```{r}
+dfSummaryStats %>%
+  filter(N==10)%>%
+ggplot(aes(x=p_1m, y = AvgNhat, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~maxMinute)+
+  theme_light()+ 
+  labs(title  = "Average Population Estimates", subtitle = "N = 10",x= "1 Min Detection Probability (p_1m)",y = "Average N Estimate")+
+  scale_color_discrete(name = "Alpha")
+```
+
+
+Why does SE decrease as p_1m increases? Because we have more data points to work with? Is that also why it decreases so dramatically when alpha = 0.3? Combo of more true individuals detected + more new individuals added to the sample
+
+```{r}
+dfSummaryStats %>%
+  filter(N==20)%>%
+ggplot(aes(x=p_1m, y = AvgNhatSE, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~maxMinute)+
+  theme_light()+ 
+  labs(title  = "Standard Error of Population Estimates", subtitle = "N = 20",x= "1 Min Detection Probability (p_1m)",y = "Average SE of Estimate")+
+  scale_color_discrete(name = "Alpha")
+```
+
+```{r}
+dfSummaryStats %>%
+  filter(N==10)%>%
+ggplot(aes(x=p_1m, y = AvgNhatSE, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~maxMinute)+
+  theme_light()+ 
+  labs(title  = "Standard Error of Population Estimates", subtitle = "N = 10",x= "1 Min Detection Probability (p_1m)",y = "Average SE of Estimate")+
+  scale_color_discrete(name = "Alpha")
+```
+
+
+It makes sense that MSE is largest when alpha is largest because we are introducing more individuals into the data than there should be. As probability of detection increases, for a fixed alpha, I assumed mse should be increasing. This is because we are detecting more individuals, which means more opportunities for us to miscount. 
+
+- **So if this is the case, for when alpha = 0.3, why is mse decreasing?** 
+```{r}
+dfSummaryStats %>%
+  filter(N==20)%>%
+ggplot(aes(x=p_1m, y = mse, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~maxMinute)+
+  theme_light()+ 
+  labs(title  = "MSE of Population Estimates", subtitle = "N = 20")
+```
+
+
+
+Coverage for when min= 5 is as expected; lower coverage as alpha increases due to miscounting. What is interesting however is that even for a small alpha value, given a high enough detection probability, the coverage will go to 0. When time = 10, the rate at which coverage drops to 0 is much faster. 
+```{r}
+dfSummaryStats %>%
+  filter(N==20)%>%
+ggplot(aes(x=p_1m, y = coverage, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~maxMinute)+
+  theme_light()+ 
+  labs(title  = "Coverage of Population Estimates", subtitle = "N = 20")
+```
+
+
+
+
+
