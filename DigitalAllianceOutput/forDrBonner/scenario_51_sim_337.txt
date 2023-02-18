@@ -1,0 +1,121 @@
+[1] "starting fit model"
+  The file is scenario51_337_001.inp on unit 4.
+  Welcome to MARK oadebajo on machine in subdirectory "/project/6004325/oadebajo" running file "scenario51_337_001.inp".
+  INPUT --- proc title ;
+
+   CPU Time for the last procedure was 0.01 seconds.     
+  INPUT --- proc chmatrix occasions= 10 groups= 1 etype= Closed Nodes= 
+  INPUT --- 101 ICMeans NoHist hist= 5  ;
+  INPUT ---    time interval 1 1 1 1 1 1 1 1 1 ;
+  INPUT ---    glabel(1)=Group 1;
+   Number of unique encounter histories read was 5.
+   Number of individual covariates read was 0.
+   Time interval lengths are all equal to 1.
+
+   CPU Time for the last procedure was 0.01 seconds.     
+  INPUT --- proc estimate link=Parm-Specific NOLOOP varest=2ndPart    ;
+   Model is { p(~1)c()f0(~1) }
+  INPUT --- model={ p(~1)c()f0(~1) };
+  INPUT ---    group=1 p    rows=1 cols=10 Square ;
+  INPUT ---        1 1 1 1 1 1 1 1 1 1 ;
+  INPUT ---    group=1 c    rows=1 cols=9 Square ;
+  INPUT ---        1 1 1 1 1 1 1 1 1 ;
+  INPUT ---    group=1 f0    rows=1 cols=1 Square ;
+  INPUT ---        2 ;
+  INPUT ---    design matrix constraints=2 covariates=2 identity;
+  INPUT ---    links=2;
+  INPUT ---    Logit;
+  INPUT ---    Log;
+  INPUT ---       blabel(1)=p:(Intercept);
+  INPUT ---       blabel(2)=f0:(Intercept);
+  INPUT ---       rlabel(1)=p g1 t1;
+  INPUT ---       rlabel(2)=f0 g1 a0 t1;
+   Model is { p(~1)c()f0(~1) }
+   Link Function Used is PARM-SPECIFIC
+   Variance Estimation Procedure Used is 2ndPart 
+
+   M(t+1):
+         8
+
+
+   -2logL(saturated) = 0.9715040     
+ Effective Sample Size = 80
+{ p(~1)c()f0(~1) } Iteration 0 { p(~1)c()f0(~1) } Iteration 1 { p(~1)c()f0(~1) } Iteration 2 { p(~1)c()f0(~1) } Iteration 3 { p(~1)c()f0(~1) } Iteration 4 { p(~1)c()f0(~1) } Iteration 5 { p(~1)c()f0(~1) } Iteration 6 { p(~1)c()f0(~1) } Iteration 7 { p(~1)c()f0(~1) } Iteration 8 { p(~1)c()f0(~1) } Iteration 9 { p(~1)c()f0(~1) } Iteration 10 { p(~1)c()f0(~1) } Iteration 11 { p(~1)c()f0(~1) } Iteration 12 { p(~1)c()f0(~1) } Iteration 13 { p(~1)c()f0(~1) } Iteration 14 { p(~1)c()f0(~1) } Iteration 15 { p(~1)c()f0(~1) } Iteration 16 { p(~1)c()f0(~1) } Iteration 17 { p(~1)c()f0(~1) } Iteration 18 
+   CPU Time for numerical optimization was 0.01 seconds.     
+   -2logL { p(~1)c()f0(~1) } = -391.64360    
+   Penalty { p(~1)c()f0(~1) } = 0.0000000     
+   Gradient { p(~1)c()f0(~1) }:
+  0.2007587E-02  0.5856848E-03
+{ p(~1)c()f0(~1) } VC Matrix: 100% done.  CPU Time to compute VC matrix was 0.01 seconds.     
+ CPU Time to invert VC matrix was 0.01 seconds.     
+ Gap Method for Num. of Estimated Parameters { p(~1)c()f0(~1) } = 2          
+ Numerical Threshold Method for Num. of Estimated Parameters { p(~1)c()f0(~1) } = 0          
+ Number of Estimated Parameters { p(~1)c()f0(~1) } = 2          
+
+   * *  WARNING  * *   Number of parameters estimated from gap method (=2) and threshold method (=0) differ.  Inspect full output. 
+   DEVIANCE { p(~1)c()f0(~1) } = -392.61510              
+ DEVIANCE Degrees of Freedom { p(~1)c()f0(~1) } = 5          
+   c-hat { p(~1)c()f0(~1) } = -78.523021    
+   AIC { p(~1)c()f0(~1) } = -391.64360    
+   AICc { p(~1)c()f0(~1) } = -391.64360    
+   BIC { p(~1)c()f0(~1) } = -391.64360    
+   Pearson Chisquare { p(~1)c()f0(~1) } = 0.3649606E+18 
+   Possible Encounter Histories { p(~1)c()f0(~1) } = 1023          
+   Pearson Chisquare df { p(~1)c()f0(~1) } = 1022          
+   Pearson chat { p(~1)c()f0(~1) } = 0.3571043E+15 
+   Sum(Observed/Expected) { p(~1)c()f0(~1) } = 0.1459842E+18 
+STOP NORMAL EXIT
+   s-bar { p(~1)c()f0(~1) } = 0.1428417E+15 
+   Fletcher chat { p(~1)c()f0(~1) } = 2.5000000     
+
+   * *  WARNING  * *   Divide by zero occurred during variance-covariance calculation of this model. 
+
+   * *  WARNING  * *   Invalid calculation occurred during processing derived parameters of this model. 
+ Beta number 2 is a singular value.
+
+   CPU Time for the last procedure was 0.01 seconds.     
+  INPUT --- proc stop;
+
+     CPU Time in minutes for this job was 0.00
+
+     Time Start = 19:51:35.446   Time End = 19:51:35.451
+
+     Wall Clock Time in minutes for this job was 0.00
+[1] "single simulation success"
+  trueValues variable     estimate  se          lcl          ucl       AIC
+1        0.1  p g1 t1 6.850055e-18   0 0.000000e+00 0.000000e+00 -391.6436
+2       10.0        N 1.168103e+17 NaN 1.168103e+17 1.168103e+17 -391.6436
+  MarkEncounters DataEncounters combinationNumber simulationNumber
+1              7              5                51              337
+2              7              5                51              337
+  p_1m alpha maxMinute  N strFormula strModel combinationNumber
+1  0.1   0.1        10 10         ~1   Closed                51
+  simulationNumber seed
+1              337 NULL
+  locationID individual         ch Minute1 Minute2 Minute3 Minute4 Minute5
+1          1        1_1 0010000000       0       0       1       0       0
+2          1        1_2 0000000010       0       0       0       0       0
+3          1        2_2 0000000100       0       0       0       0       0
+4          1        3_1 1000000000       1       0       0       0       0
+5          1        3_4 0000000001       0       0       0       0       0
+6          1        4_1 1000000000       1       0       0       0       0
+7          1        6_1 1000000000       1       0       0       0       0
+8          1        8_1 1000000000       1       0       0       0       0
+  Minute6 Minute7 Minute8 Minute9 Minute10 combinationNumber simulationNumber
+1       0       0       0       0        0                51              337
+2       0       0       0       1        0                51              337
+3       0       0       1       0        0                51              337
+4       0       0       0       0        0                51              337
+5       0       0       0       0        1                51              337
+6       0       0       0       0        0                51              337
+7       0       0       0       0        0                51              337
+8       0       0       0       0        0                51              337
+  seed
+1 NULL
+2 NULL
+3 NULL
+4 NULL
+5 NULL
+6 NULL
+7 NULL
+8 NULL
