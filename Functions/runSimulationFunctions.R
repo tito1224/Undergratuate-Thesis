@@ -56,12 +56,12 @@ generateFormula = function(){
 ## assuming we have the data, fit the model, with necessary specifications
 ## use the parameters to determine which formula and model to use
 #Q: use real or beta df? fitModel(dfMark, bC=TRUE,bTime=TRUE, bAdditive=TRUE) vs fitModel(dfMark, bC=TRUE,bTime=TRUE, bAdditive=FALSE)
-fitModel = function(ch,strFormula="~1",strModel="Closed",nMixtures=1,scenarioSimNum=40){
+fitModel = function(ch,strFormula="~1",strModel="Closed",nMixtures=1,scenarioSimNum="40"){
   print("starting fit model")
   # fit the model 
   pformula = list(formula = eval(parse_expr(strFormula)),share=TRUE)
-  model = mark(ch, model = strModel, model.parameters = list(p=pformula),prefix=scenarioSimNum,delete=FALSE,output=FALSE,mixtures=nMixtures)
-  
+  model = mark(ch, model = strModel, model.parameters = list(p=pformula),prefix=scenarioSimNum,delete=TRUE,output=FALSE,mixtures=nMixtures)
+  # change delete= TRUE to delete = FALSE when running on super computer!!!
   # find the number of unique encounter histories in the data
   markEncounterHistory = model$results$deviance.df + 2 # double check that this is how df is calculated (# unique histories - 2)
   dataEncounterHistory = nrow(unique(ch))
@@ -86,7 +86,7 @@ fitModel = function(ch,strFormula="~1",strModel="Closed",nMixtures=1,scenarioSim
   return(dfEstimates)
 }
 
-runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",strModel="Closed",nMixtures=1,seed = NULL,scenarioSimNum=40){
+runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",strModel="Closed",nMixtures=1,seed = NULL,scenarioSimNum="40"){
   # generate regular data
   #locationID = 1:n_locations
   #N_i = rpois(n_locations,lambda)
@@ -105,10 +105,10 @@ runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",
   dfMark = detectsToCapHist(dfMarkInitial)[,"ch"] # for now combine all detections regardless of locationID 
   dfHistOutput = detectsToCapHist(dfMarkInitial)
   
-  # add conditional for if no individuals are detected 
-  # if(nrow(dfMark)==0){
-  #   return(list(NA,NA))
-  # }
+  # add conditional for if no individuals are detected - doing this to verify that no individuals were detected after the split
+  if(nrow(dfHistOutput)==0){
+    dfHistOutput = detectsToCapHist(dfMarkInitial,keepZeros = TRUE)
+  }
   
   # fit model
   # add tryCatch statement so it keeps running even if the model doesn't fit -> code -200 will show in the dataset to indicate this
@@ -259,6 +259,9 @@ runSimulation = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlph
       dfFinalParams = rbind(dfFinalParams,dfTempParams)
       dfFinalHist = rbind(dfFinalHist,dfHist)
       simulationNumber = simulationNumber+1
+      
+      # add a sleep timer for 5 seconds -> maybe this will help mark run a little better
+      #Sys.sleep(5)
     }
     # update combination counter
     combinationNumber=combinationNumber+1
