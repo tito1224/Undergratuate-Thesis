@@ -11,7 +11,12 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Load Results
 
+
 ```{r}
+# in case issues with installation of gExtras:
+# https://stackoverflow.com/questions/42807247/installing-package-cannot-open-file-permission-denied
+# https://stackoverflow.com/questions/60451908/tidyverse-not-loaded-it-says-namespace-vctrs-0-2-0-is-already-loaded-but
+
 library(tidyverse)
 library(gtools)
 library(data.table)
@@ -19,6 +24,9 @@ library(matrixStats)
 library(RMark)
 library(stringi)
 library(rlang)
+library(gt)
+library(gtExtras)
+library(webshot2)
 ```
 
 
@@ -88,6 +96,7 @@ for (item in dataFinalTrial2){
 
 
 
+
 # Outliers
 
 Find outlier values
@@ -111,6 +120,11 @@ print(nOutliers)
 print(nEstimates)
 print(nOutliers/nEstimates)
 dfOutliers
+```
+
+```{r}
+dfSummarisedFinal%>%
+  filter(combinationNumber %in% dfOutliers$combinationNumber)
 ```
 
 
@@ -150,6 +164,74 @@ dfMultDetect = dfHistoryFinal %>%
 dfSingleDetection = dfHistoryFinal %>%
   filter(counts==1 & !(id %in% dfMultDetect$id))
 ```
+
+## Likelihood 
+
+Generate likelihood for a scenario where 3 individuals are captured only once across 5 capture occasions with a population of N = 10, to demonstrate why single detections are bad.
+
+```{r}
+ll_func = function(p){
+  #val = log(factorial(10)/factorial(7)) + 3*log(p) + 47*log(1-p)
+  val = (factorial(10)/factorial(7))*(p**3)*((1-p)**47)
+  return(log(val))
+}
+
+ll_data = tibble(p = seq(0.1,1,0.001),
+                 log_likelihood = ll_func(p))
+
+ggplot(ll_data)+
+  geom_line(aes(x= p, y = log_likelihood))+ 
+  theme_bw()+ 
+  labs(title = "Log-Likelihood for 3 Individuals Detected Only Once", subtitle = "N = 10, Capture Occasions = 5", x= "p", y = "Log-Likelihood")
+```
+
+```{r}
+ll_func = function(N,p=0.1){
+  #val = log(factorial(10)/factorial(7)) + 3*log(p) + 47*log(1-p)
+  val = (factorial(N)/factorial(N-3))*(p**3)*((1-p)**((N*5)-3))
+  return(log(val))
+}
+
+ll_data = tibble(N = seq(0,210,0.1),
+                 log_likelihood = ll_func(N,p=0.5))
+
+ggplot(ll_data)+
+  geom_line(aes(x= N, y = log_likelihood))+ 
+  theme_bw()+ 
+  labs(title = "Log-Likelihood for 3 Individuals Detected Only Once", subtitle = "p = 0.1, Capture Occasions = 5", x= "N", y = "Likelihood")
+```
+
+
+```{r}
+head(dfEstimatesFinal%>%
+  filter(estimate > 10 & estimate < 20 & trueValues == 10))
+dfHistoryFinal%>%
+  filter(id == "1_8")%>%
+  group_by(ch)%>%
+  summarise(n())
+```
+
+Nice to see shape of the likelihood function for id 1_8
+```{r}
+ll_func = function(N,M,p,X_w,t){
+  #X_w represents number of times different detection histories happened
+  # vector of counts
+  val = (factorial(N)/factorial(N-M) * product(factorial(X_w)) )*(p**M)*((1-p)**((N*t)-M))
+  #return(log(val))
+  return(val)
+}
+
+ll_data = tibble(N = seq(1,40,0.1),
+                 log_likelihood = ll_func(N=N,M=3,p=0.1,X_w=c(6,2,2),t=5))
+
+ggplot(ll_data)+
+  geom_line(aes(x= N, y = log_likelihood))+ 
+  theme_bw()+ 
+  labs(title = "Log-Likelihood for 3 Individuals Detected Only Once", subtitle = "N = 10, Capture Occasions = 5", x= "N", y = "Log-Likelihood")
+```
+
+
+
 
 
 ## Incorrect Estimates
@@ -219,6 +301,41 @@ fitModel(ch)
 ```
 
 
+## Exploratory Analysis
+
+```{r}
+dfHistoryFinal = left_join(dfHistoryFinal,dfSummarisedFinal[,1:6], by= "combinationNumber")
+```
+
+
+```{r}
+head(dfHistoryFinal)
+```
+
+
+
+```{r}
+dfPointCounts = dfHistoryFinal%>%
+  group_by(p_1m,alpha,N,maxMinute,id)%>%
+  summarise(PointCounts = n())
+head(dfPointCounts%>%
+       arrange(desc(PointCounts)))
+```
+
+
+```{r}
+dfPointCounts%>%
+  filter(N == 20)%>%
+ggplot()+
+  geom_boxplot(aes(x=as.factor(p_1m), y = PointCounts, color = as.factor(alpha)))+
+  facet_wrap(~maxMinute)+
+  theme_bw()+
+  labs(title = "Point Counts Across Scenarios Facetted by Capture Ocassions", subtitle = "Population N = 20", x= "P_1m", y = "Point Counts")+ 
+  scale_color_discrete(name = "Alpha")
+```
+
+
+
 
 # Clean Data
 
@@ -233,7 +350,13 @@ dfEstimatesFinal = dfEstimatesFinalUnClean %>%
   filter(estimate>=0) %>%
   filter(!(id %in% dfSingleDetection$id))#%>%
   #filter(!(id %in% dfMisMatch$id))
+
+dfEstimatesProbability = dfEstimatesFinalUnClean %>%
+  filter(variable == "p g1 t1") %>%
+  filter(estimate>=0) %>%
+  filter(!(id %in% dfSingleDetection$id))
 ```
+
 
 Total outliers make up appx 10% of the data if we include mis matches and 6% of the data if we do not include mismatches
 ```{r}
@@ -244,7 +367,9 @@ Total outliers make up appx 10% of the data if we include mis matches and 6% of 
 #add p,alpha,N, etc
 dfSummarisedFinal = dfSummarisedFinal[!(duplicated(dfSummarisedFinal$combinationNumber)),]
 dfEstimatesFinal = left_join(dfEstimatesFinal, dfSummarisedFinal[,1:6], by= "combinationNumber")
+dfEstimatesProbability  =  left_join(dfEstimatesProbability, dfSummarisedFinal[,1:6], by= "combinationNumber")
 ```
+
 
 ```{r}
 head(dfEstimatesFinal)
@@ -269,7 +394,7 @@ dfEstimatesPop = dfEstimatesFinal %>%
   filter(N==20)
 ```
 
-Make sure they all have around the same data points - 300+ data points per scenario.
+Make sure they all have around the same data points - 600+ data points per scenario.
 ```{r}
 dfEstimatesPop %>%
   filter(variable == "N")%>%
@@ -299,6 +424,7 @@ Looking at how estimates varies as alpha increases when p_1m is fixed and time i
 - a small probability of errors already skyrockets the estimates --> even when we only have five capture occasions.
 
 
+- once we reach alpha = 10% for time = 10, no matter what p_1m is, median estimate is basically the same -> only change is that alpha becomes smaller...
 ```{r}
 dfEstimatesPop %>%
 ggplot()+
@@ -326,6 +452,82 @@ ggplot()+
   theme_bw()
 ```
 
+
+How many individuals are detected, once, twice, etc for N = 20 and maxMinute = 10.
+
+```{r}
+dfCounts = dfHistoryFinal %>%
+  filter(N==20 & maxMinute == 10 & p_1m != 0.3)%>%
+  group_by(p_1m,alpha,maxMinute,counts)%>%
+  summarise(c =n())%>%
+  mutate(total = sum(c),
+         percent = round(c/total*100,2))
+head(dfCounts)
+```
+
+```{r}
+ggplot(dfCounts,aes(x=as.factor(counts), y = percent, fill = as.factor(alpha)))+ 
+  geom_bar(stat ="identity", position = "dodge")+
+  facet_wrap(~p_1m)+
+  theme_bw()+ 
+  scale_fill_discrete(name="Alpha")+
+  labs(title = "Distribution of Number of Detections Across Capture Histories", subtitle= "Facetted by Detection Probability. Capture Occasion = 10.", x = "Detections per Individual",y = "% of Individuals Detected ")
+```
+
+```{r}
+dfCounts = dfHistoryFinal %>%
+  filter(N==20 & maxMinute == 5 & p_1m != 0.3)%>%
+  group_by(p_1m,alpha,maxMinute,counts)%>%
+  summarise(c =n())%>%
+  mutate(total = sum(c),
+         percent = round(c/total*100,2))
+
+ggplot(dfCounts,aes(x=as.factor(counts), y = percent, fill = as.factor(alpha)))+ 
+  geom_bar(stat ="identity", position = "dodge")+
+  facet_wrap(~p_1m)+
+  theme_bw()+ 
+  scale_fill_discrete(name="Alpha")+
+  labs(title = "Distribution of Number of Detections Across Capture Histories", subtitle= "Facetted by Detection Probability. Capture Occasion = 5.", x = "Detections per Individual",y = "% of Individuals Detected ")
+```
+
+
+```{r}
+dfCounts = dfHistoryFinal %>%
+  filter(N==20 & maxMinute == 5 & p_1m != 0.3)%>%
+  group_by(p_1m,alpha,maxMinute,counts)%>%
+  summarise(c = n())%>% # of times someone was counted once, twice, etc
+  mutate(total = sum(c))
+```
+
+
+Distribution of detection probabilities
+```{r}
+dfEstimatesProbability%>%
+  filter(alpha == 0.3 & maxMinute == 10)%>%
+  ggplot()+ 
+  geom_density(aes(x=estimate, color = as.factor(p_1m)))+ 
+  theme_bw()
+ 
+```
+
+
+
+
+```{r}
+dfCompareEstimates = dfEstimatesFinal%>%
+  filter(alpha==0.3  & p_1m %in% c(0.1,0.5) & N == 20)%>%
+  group_by(maxMinute,p_1m)%>%
+  summarise(`Average Estimate` = round(mean(estimate),1),
+            `Standard Deviation`=round(sd(estimate),1))%>%
+  rename(`Capture Occasions` = maxMinute)
+dfCompareEstimates
+# dfCompareEstimates = dfCompareEstimates%>%
+#   gt()%>%
+#   gt_theme_nytimes()
+# gtsave(dfCompareEstimates, "compareEstimates.png")
+```
+
+
 # Tables
 
 ```{r}
@@ -337,6 +539,7 @@ dfSummaryStats = dfEstimatesFinal %>%
     filter(variable == "N")%>% # only focus on N? or also use p??
     group_by(p_1m,alpha,N,maxMinute,combinationNumber)%>%
     summarise(AvgNhat = mean(estimate,na.rm=TRUE),
+              medianNhat= median(estimate,na.rm=TRUE),
               AvgNhatSE= mean(se,na.rm=TRUE),
               sdNhat = sd(estimate,na.rm=TRUE),
               biasNhat = AvgNhat - N,
@@ -344,7 +547,10 @@ dfSummaryStats = dfEstimatesFinal %>%
               bias_SE_Nhat = AvgNhatSE - sdNhat,
               coverage = sum(bCoverage,na.rm=TRUE)/sum(!is.na(estimate)), # changed this from n() to sum(!is.na()) because I have some NA values for my estimates
               avgWidth = mean(width,na.rm=TRUE),
-              avgAIC = mean(AIC,na.rm=TRUE))
+              avgAIC = mean(AIC,na.rm=TRUE),
+              relNhatBias = round(biasNhat/N*100,2),
+              avgUCL= mean(ucl,na.rm=TRUE),
+              avgLCL = mean(lcl, na.rm=TRUE))
 dfSummaryStats = dfSummaryStats[!duplicated(dfSummaryStats),]
 dfSummaryStats
 ```
@@ -371,17 +577,219 @@ ggplot(aes(x=p_1m, y = AvgNhat, color = as.factor(alpha)))+
 
 
 ```{r}
+# dfSummaryStats %>%
+#   filter(N==20 & maxMinute == 10)%>%
+# ggplot(aes(x=p_1m, y = AvgNhat, color = as.factor(alpha)))+ 
+#   geom_point()+
+#   geom_line()+
+#   geom_ribbon(aes(ymin = AvgNhat - AvgNhatSE, ymax = AvgNhat + AvgNhatSE),alpha=0.1)+
+#   facet_wrap(~as.factor(alpha))+
+#   theme_bw()+ 
+#   labs(title  = "Average Population Estimates and Standard Error", subtitle = "N = 20, 10 Capture Occasions.",x= "1 Min Detection Probability (p_1m)",y = "Average Population Estimate")+
+#   scale_color_discrete(name = "Alpha")
 dfSummaryStats %>%
-  filter(N==10)%>%
+  filter(N==20 & maxMinute == 10)%>%
 ggplot(aes(x=p_1m, y = AvgNhat, color = as.factor(alpha)))+ 
   geom_point()+
   geom_line()+
-  facet_wrap(~maxMinute)+
+  geom_ribbon(aes(ymin = avgLCL, ymax = avgUCL),alpha=0.1)+
+  facet_wrap(~as.factor(alpha))+
   theme_bw()+ 
-  labs(title  = "Average Population Estimates", subtitle = "N = 10",x= "1 Min Detection Probability (p_1m)",y = "Average N Estimate")+
+  labs(title  = "Average Population Estimates and Standard Error", subtitle = "N = 20, 10 Capture Occasions.",x= "1 Min Detection Probability (p_1m)",y = "Average Population Estimate")+
   scale_color_discrete(name = "Alpha")
 ```
 
+
+
+```{r}
+dfSummaryStats %>%
+  filter(N==20 & maxMinute == 5)%>%
+ggplot(aes(x=p_1m, y = AvgNhat, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  geom_ribbon(aes(ymin = avgLCL, ymax = avgUCL),alpha=0.1)+
+  facet_wrap(~as.factor(alpha))+
+  theme_bw()+ 
+  labs(title  = "Average Population Estimates and Standard Error", subtitle = "N = 20, 5 Capture Occasions.",x= "1 Min Detection Probability (p_1m)",y = "Average Population Estimate")+
+  scale_color_discrete(name = "Alpha")
+```
+
+```{r}
+dfSummaryStats%>%
+  filter(p_1m==0.2 & N==20 & maxMinute == 5)
+```
+
+
+
+```{r}
+dfInteract = dfEstimatesFinal%>%
+  filter(N=="20" & maxMinute==10)
+interaction.plot(x.factor = dfInteract$p_1m,
+                 trace.factor = dfInteract$alpha,
+                 response = dfInteract$estimate)
+
+dfInteract = dfEstimatesFinal%>%
+  filter(N=="20" & maxMinute==5)
+interaction.plot(x.factor = dfInteract$p_1m,
+                 trace.factor = dfInteract$alpha,
+                 response = dfInteract$estimate)
+
+dfInteract = dfEstimatesFinal%>%
+  filter(N=="10" & maxMinute==10)
+interaction.plot(x.factor = dfInteract$p_1m,
+                 trace.factor = dfInteract$alpha,
+                 response = dfInteract$estimate)
+dfInteract = dfEstimatesFinal%>%
+  filter(N=="10" & maxMinute==5)
+interaction.plot(x.factor = dfInteract$p_1m,
+                 trace.factor = dfInteract$alpha,
+                 response = dfInteract$estimate)
+```
+
+```{r}
+head(dfEstimatesFinal)
+```
+
+
+```{r}
+dfInteract = dfEstimatesFinal%>%
+  filter(N=="20"& p_1m==0.1)
+interaction.plot(x.factor = dfInteract$maxMinute,
+                 trace.factor = dfInteract$DataEncounters,
+                 response = dfInteract$estimate)
+```
+
+
+Significant interaction between capture occasions and detection probability on mean estimate. 
+```{r}
+dfInteract = dfEstimatesFinal%>%
+  filter(N==20)
+interaction.plot(x.factor = dfInteract$maxMinute,
+                 trace.factor = dfInteract$p_1m,
+                 response = dfInteract$estimate)
+```
+
+
+```{r}
+dfEstimatesFinal%>%
+  filter(N == 20)%>%
+  group_by(maxMinute, p_1m, alpha)%>%
+  summarise(avgEstimate = mean(estimate,na.rm=TRUE))%>%
+  ggplot()+
+  geom_line(aes(x=maxMinute,y=avgEstimate,color=as.factor(p_1m)))+
+  facet_wrap(~alpha,scales="free")+
+  theme_bw()+
+  labs(title = "Interaction Plot Between Capture Occasion and Detection Probability",subtitle = "Facetted by Alpha",x = "Number of Capture Occasions",y = "Mean Population Estimate")+
+  scale_color_discrete(name = "Detection Probability")
+
+```
+
+All significant.
+```{r}
+dfAnova=dfEstimatesFinal%>%
+  filter(N == 20 & alpha == 0.1)
+aov1 = aov(estimate ~ as.factor(maxMinute)*as.factor(p_1m), data = dfAnova)
+summary(aov1)
+```
+
+
+## Why does p=0.2 cause a jump then fall 
+
+```{r}
+dfSummaryStats %>%
+  filter(N==20 & maxMinute == 5)%>%
+ggplot(aes(x=p_1m, y = medianNhat, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  geom_ribbon(aes(ymin = medianNhat - AvgNhatSE, ymax = medianNhat + AvgNhatSE),alpha=0.1)+
+  facet_wrap(~as.factor(alpha))+
+  theme_bw()+ 
+  labs(title  = "Median Population Estimates", subtitle = "N = 20, 5 Capture Occasions.",x= "1 Min Detection Probability (p_1m)",y = "Average Population Estimate")+
+  scale_color_discrete(name = "Alpha")
+```
+
+```{r}
+dfHistoryFinal%>%
+  filter(p_1m==0.2 & N == 20 & maxMinute==5)%>%
+  group_by(id,ch)%>%
+  mutate(n = n())%>%
+  group_by(ch)%>%
+  summarise(avg = mean(n))
+```
+
+Obviously increasing M increases estimate
+```{r}
+ll_data = tibble(M = seq(1,10,0.01),
+                 log_likelihood = ll_func(N=20,M=M,p=0.2,X_w= c(2,2,6),t=5))
+
+ggplot(ll_data)+
+  geom_line(aes(x= M, y = log_likelihood))+ 
+  theme_bw()+ 
+  labs(title = "Log-Likelihood for 3 Individuals Detected Only Once", subtitle = "N = 10, Capture Occasions = 5", x= "N", y = "Log-Likelihood")
+```
+
+```{r}
+ll_func = function(N,M,p,X_w,t,n){
+  #X_w represents number of times different detection histories happened
+  # vector of counts
+  # n represents what n. in the paper is; max is M_{t+1} * t
+  val = (factorial(N)/factorial(N-M) * product(factorial(X_w)) )*(p**n)*((1-p)**((N*t)-n))
+  #return(log(val))
+  return(val)
+}
+
+n = c(1,20,40)
+ll_data = tibble(N = seq(1,30,0.1))%>%
+  crossing(n)%>%
+  mutate(log_likelihood = ll_func(N=N,M=6,p=0.2,X_w=c(6,2,2),t=5,n=10))
+
+ggplot(ll_data)+
+  geom_line(aes(x= N, y = log_likelihood, color = as.factor(n)))+ 
+  theme_bw()+ 
+  labs(title = "Log-Likelihood for 3 Individuals Detected Only Once", subtitle = "N = 10, Capture Occasions = 5", x= "N", y = "Log-Likelihood")+ 
+  facet_wrap(~n)
+```
+
+
+```{r}
+M = 1:10
+ll_data = tibble(N = seq(1,30,0.1))%>%
+  crossing(M)%>%
+  mutate(log_likelihood = ll_func(N=N,M=M,p=0.2,X_w=c(6,2,2,4,4,6),t=5,n=10))
+
+ggplot(ll_data)+
+  geom_line(aes(x= N, y = log_likelihood ))+ 
+  theme_bw()+ 
+  labs(title = "Log-Likelihood for 3 Individuals Detected Only Once", subtitle = "N = 10, Capture Occasions = 5", x= "N", y = "Log-Likelihood")+
+  facet_wrap(~M,scales = "free")
+```
+
+Chaning Xw changes scale, but not the shape of the likelihood!
+```{r}
+M = 1:10
+ll_data = tibble(N = seq(1,30,0.1))%>%
+  crossing(M)%>%
+  mutate(log_likelihood = ll_func(N=N,M=M,p=0.2,X_w=c(6,2,2),t=5,n=10))
+
+ggplot(ll_data)+
+  geom_line(aes(x= N, y = log_likelihood ))+ 
+  theme_bw()+ 
+  labs(title = "Log-Likelihood for 3 Individuals Detected Only Once", subtitle = "N = 10, Capture Occasions = 5", x= "N", y = "Log-Likelihood")+
+  facet_wrap(~M,scales = "free")
+```
+Looks like what is really changing the likelihood is unique detections/individuals M_t+1. Probs due to the (N-M_{t+1})! part in the likelihood that we would need to take the derivative of. I think interaction between M_{t+1} and 
+
+
+```{r}
+dfEstimatesFinal%>%
+  filter(N=="20" & p_1m ==0.1)%>%
+ggplot()+
+  geom_point(aes(x=DataEncounters, y = estimate, color = as.factor(alpha)))+
+  facet_wrap(~maxMinute)
+```
+
+
+## Why SE decrease
 
 Why does SE decrease as p_1m increases? Because we have more data points to work with? Is that also why it decreases so dramatically when alpha = 0.3? Combo of more true individuals detected + more new individuals added to the sample
 
@@ -408,7 +816,7 @@ ggplot(aes(x=p_1m, y = AvgNhatSE, color = as.factor(alpha)))+
   labs(title  = "Standard Error of Population Estimates", subtitle = "N = 10",x= "1 Min Detection Probability (p_1m)",y = "Average SE of Estimate")+
   scale_color_discrete(name = "Alpha")
 ```
-
+## mse
 
 It makes sense that MSE is largest when alpha is largest because we are introducing more individuals into the data than there should be. As probability of detection increases, for a fixed alpha, I assumed mse should be increasing. This is because we are detecting more individuals, which means more opportunities for us to miscount. 
 
@@ -421,9 +829,17 @@ ggplot(aes(x=p_1m, y = mse, color = as.factor(alpha)))+
   geom_line()+
   facet_wrap(~maxMinute)+
   theme_bw()+ 
-  labs(title  = "MSE of Population Estimates", subtitle = "N = 20")
+  labs(title  = "Mean Squared Error of Population Estimates", subtitle = "Facetted by Capture Occasions. N = 20. ",x= "1 Min Detection Probability (p_1m)",y = "Average MSE of Estimates")+
+  scale_color_discrete(name = "Alpha")
+```
+```{r}
+dfSummaryStats %>%
+  filter(N==20 & p_1m %in% c(0.1,0.5)&alpha==0.05)
 ```
 
+
+
+## Coverage
 
 
 Coverage for when min= 5 is as expected; lower coverage as alpha increases due to miscounting. What is interesting however is that even for a small alpha value, given a high enough detection probability, the coverage will go to 0. When time = 10, the rate at which coverage drops to 0 is much faster. 
@@ -435,10 +851,42 @@ ggplot(aes(x=p_1m, y = coverage, color = as.factor(alpha)))+
   geom_line()+
   facet_wrap(~maxMinute)+
   theme_light()+ 
-  labs(title  = "Coverage of Population Estimates", subtitle = "N = 20")
+  labs(title  = "Coverage Probability", subtitle = "Facetted by Capture Occasions. N = 20.", x= "1 Min Detection Probability (p_1m)",y = "Coverage Probability")+
+  scale_color_discrete(name = "Alpha")+
+  theme_bw()
 ```
 
 
+```{r}
+dfSummaryStats %>%
+  filter(N==20)%>%
+ggplot(aes(x=p_1m, y = avgWidth , color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~maxMinute)+
+  theme_bw()
+```
 
+```{r}
+dfSummaryStats %>%
+  filter(N==20)%>%
+ggplot(aes(x=p_1m, y = bias_SE_Nhat, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~maxMinute)+
+  theme_bw()
+```
 
+```{r}
+dfSummaryStats %>%
+  filter(N==20)%>%
+ggplot(aes(x=p_1m, y = relNhatBias, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~maxMinute)+
+  theme_light()+ 
+  labs(title  = "Relative Bias", subtitle = "Facetted by Capture Occasions. N = 20.", x= "1 Min Detection Probability (p_1m)",y = "Relative Bias %")+
+  scale_color_discrete(name = "Alpha")+
+  theme_bw()
+```
 
