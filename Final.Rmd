@@ -44,10 +44,7 @@ setwd("~/Rcode/Undergratuate-Thesis/DigitalAllianceOutput/Final")
 dataFinalTrial = list.files(pattern = ".rds")
 dataFinalTrial = mixedsort(dataFinalTrial)%>% # use mixedsort so it appears in ascending order 
   map(readRDS)
-```
 
-
-```{r}
 dfSummarisedFinal= data.frame()
 dfEstimatesFinal = data.frame()
 dfHistoryFinal = data.frame()
@@ -66,7 +63,6 @@ for (item in dataFinalTrial){
   dfHistoryFinal = rbind(dfHistoryFinal, tempHistory)
   #counter = counter + 1
 }
-
 ```
 
 
@@ -76,9 +72,7 @@ setwd("~/Rcode/Undergratuate-Thesis/DigitalAllianceOutput/Final2")
 dataFinalTrial2 = list.files(pattern = ".rds")
 dataFinalTrial2 = mixedsort(dataFinalTrial2)%>% # use mixedsort so it appears in ascending order 
   map(readRDS)
-```
 
-```{r}
 for (item in dataFinalTrial2){
   tempSummarisedResults = item[[1]] # retrieve the summary stats
   tempCalculations = item[[2]]
@@ -94,7 +88,28 @@ for (item in dataFinalTrial2){
 }
 ```
 
+I ran some extra cases where alpha = 0, so I need to add and update
+```{r}
+setwd("~/Rcode/Undergratuate-Thesis/DigitalAllianceOutput/Final3")
+dataFinalTrial3 = list.files(pattern = ".rds")
+dataFinalTrial3 = mixedsort(dataFinalTrial3)%>% # use mixedsort so it appears in ascending order 
+  map(readRDS)
 
+for (item in dataFinalTrial3){
+  tempSummarisedResults = item[[1]] # retrieve the summary stats
+  tempCalculations = item[[2]]
+  tempHistory= item[[3]]
+  tempCalculations$combinationNumber = tempCalculations$combinationNumber+80 # need to update combination number since i'm stacking these numbers and this is a new scenario since alpha = 0
+  tempHistory$combinationNumber = tempHistory$combinationNumber+ 80
+  tempSummarisedResults$combinationNumber = tempSummarisedResults$combinationNumber+80
+  
+  
+  dfSummarisedFinal = rbind(dfSummarisedFinal,tempSummarisedResults)
+  dfEstimatesFinal = rbind(dfEstimatesFinal, tempCalculations)
+  dfHistoryFinal = rbind(dfHistoryFinal, tempHistory)
+  #counter = counter + 1
+}
+```
 
 
 # Outliers
@@ -109,7 +124,7 @@ dfHistoryFinal$id = paste0(dfHistoryFinal$combinationNumber,"_",dfHistoryFinal$s
 dfEstimatesFinalUnClean = copy(dfEstimatesFinal)
 ```
 
-14 cases did not run because no detections were made, which is fair.
+16 cases did not run because no detections were made, which is fair.
 ```{r}
 dfOutliers = dfEstimatesFinalUnClean %>%
   filter(variable == "N") %>%
@@ -185,21 +200,6 @@ ggplot(ll_data)+
   labs(title = "Log-Likelihood for 3 Individuals Detected Only Once", subtitle = "N = 10, Capture Occasions = 5", x= "p", y = "Log-Likelihood")
 ```
 
-```{r}
-ll_func = function(N,p=0.1){
-  #val = log(factorial(10)/factorial(7)) + 3*log(p) + 47*log(1-p)
-  val = (factorial(N)/factorial(N-3))*(p**3)*((1-p)**((N*5)-3))
-  return(log(val))
-}
-
-ll_data = tibble(N = seq(0,210,0.1),
-                 log_likelihood = ll_func(N,p=0.5))
-
-ggplot(ll_data)+
-  geom_line(aes(x= N, y = log_likelihood))+ 
-  theme_bw()+ 
-  labs(title = "Log-Likelihood for 3 Individuals Detected Only Once", subtitle = "p = 0.1, Capture Occasions = 5", x= "N", y = "Likelihood")
-```
 
 
 ```{r}
@@ -267,7 +267,7 @@ fitModel(ch)
 ```
 
 
-Figure out which cases have only one count - 40% of the mis matching cases have only one detection so we would have removed it anyways
+Figure out which cases have only one count - 32% of the mis matching cases have only one detection so we would have removed it anyways
 ```{r}
 nSingleMisMatch = nrow(dfMisMatch %>%
   filter(id %in% dfSingleDetection$id))
@@ -291,9 +291,9 @@ head(dfMultMisMatch)
 
 ```{r}
 dfEstimatesFinalUnClean%>%
-  filter(combinationNumber==5 & simulationNumber == 131)
+  filter(combinationNumber==1 & simulationNumber == 22)
 test = dfHistoryFinal %>%
-  filter(combinationNumber==5 & simulationNumber == 131) 
+  filter(combinationNumber==1 & simulationNumber == 22) 
 test
 nrow(unique(test[,"ch"]))
 ch = test[,"ch"]
@@ -317,7 +317,7 @@ head(dfHistoryFinal)
 ```{r}
 dfPointCounts = dfHistoryFinal%>%
   group_by(p_1m,alpha,N,maxMinute,id)%>%
-  summarise(PointCounts = n())
+  summarise(PointCounts = n()) # find number of people counted at least once
 head(dfPointCounts%>%
        arrange(desc(PointCounts)))
 ```
@@ -327,15 +327,27 @@ head(dfPointCounts%>%
 dfPointCounts%>%
   filter(N == 20)%>%
 ggplot()+
-  geom_boxplot(aes(x=as.factor(p_1m), y = PointCounts, color = as.factor(alpha)))+
+  geom_boxplot(aes(x=as.factor(p_1m), y = PointCounts, fill = as.factor(alpha)))+
+  geom_hline(aes(yintercept = 20),color="darkblue",linetype="dotted")+
   facet_wrap(~maxMinute)+
   theme_bw()+
-  labs(title = "Point Counts Across Scenarios Facetted by Capture Ocassions", subtitle = "Population N = 20", x= "P_1m", y = "Point Counts")+ 
-  scale_color_discrete(name = "Alpha")
+  labs(title = "Number of Unique Individuals Counted", subtitle = "Facetted by Capture Ocassions. Population N = 20.", x= "Per Minute Detection Probability", y = "Point Counts")+ 
+  scale_fill_discrete(name = "Alpha")
 ```
 
 
 
+```{r}
+dfPointCounts%>%
+  filter(N == 10)%>%
+ggplot()+
+  geom_boxplot(aes(x=as.factor(p_1m), y = PointCounts, fill = as.factor(alpha)))+
+  geom_hline(aes(yintercept = 10),color="darkblue",linetype="dotted")+
+  facet_wrap(~maxMinute)+
+  theme_bw()+
+  labs(title = "Number of Unique Individuals Counted", subtitle = "Facetted by Capture Ocassions. Population N = 10.", x= "Per Minute Detection Probability", y = "Point Counts")+ 
+  scale_fill_discrete(name = "Alpha")
+```
 
 # Clean Data
 
@@ -429,11 +441,11 @@ Looking at how estimates varies as alpha increases when p_1m is fixed and time i
 dfEstimatesPop %>%
 ggplot()+
   geom_boxplot(aes(x=as.factor(p_1m), y = estimate, fill = as.factor(alpha)))+ 
-  geom_hline(aes(yintercept = trueValues),color = "darkred")+
+  geom_hline(aes(yintercept = trueValues),color = "darkblue",linetype="dotted")+
   labs(title = "Population Estimates Facetted by Time", subtitle = "20 Individuals in Population. 5 and 10 Minute Facet Times.")+
   facet_wrap(~maxMinute)+ 
   scale_fill_discrete(name = "Alpha")+ 
-  labs(x= "1 Min Detection Probability (p_1m)",y = "Estimate")+
+  labs(x= "Per Minute Detection Probability",y = "Estimate")+
   theme_bw()
 ```
 
@@ -444,11 +456,11 @@ dfEstimatesFinal %>%
   filter(N==10) %>%
 ggplot()+
   geom_boxplot(aes(x=as.factor(p_1m), y = estimate, fill = as.factor(alpha)))+ 
-  geom_hline(aes(yintercept = trueValues),color = "darkred")+
+  geom_hline(aes(yintercept = trueValues),color = "darkblue",linetype="dotted")+
   labs(title = "Population Estimates Facetted by Time", subtitle = "10 Individuals in Population. 5 and 10 Minute Facet Times.")+
   facet_wrap(~maxMinute)+ 
   scale_fill_discrete(name = "Alpha")+ 
-  labs(x= "1 Min Detection Probability (p_1m)",y = "Estimate")+
+  labs(x= "Per Minute Detection Probability",y = "Estimate")+
   theme_bw()
 ```
 
@@ -466,13 +478,15 @@ head(dfCounts)
 ```
 
 ```{r}
-ggplot(dfCounts,aes(x=as.factor(counts), y = percent, fill = as.factor(alpha)))+ 
-  geom_bar(stat ="identity", position = "dodge")+
+ggplot(dfCounts,aes(x=counts, y = percent, color = as.factor(alpha)))+ 
+  #geom_point()+
+  geom_line()+
   facet_wrap(~p_1m)+
   theme_bw()+ 
-  scale_fill_discrete(name="Alpha")+
+  scale_color_discrete(name="Alpha")+
   labs(title = "Distribution of Number of Detections Across Capture Histories", subtitle= "Facetted by Detection Probability. Capture Occasion = 10.", x = "Detections per Individual",y = "% of Individuals Detected ")
 ```
+
 
 ```{r}
 dfCounts = dfHistoryFinal %>%
@@ -482,11 +496,11 @@ dfCounts = dfHistoryFinal %>%
   mutate(total = sum(c),
          percent = round(c/total*100,2))
 
-ggplot(dfCounts,aes(x=as.factor(counts), y = percent, fill = as.factor(alpha)))+ 
-  geom_bar(stat ="identity", position = "dodge")+
+ggplot(dfCounts,aes(x=counts, y = percent, color = as.factor(alpha)))+ 
+  geom_line()+
   facet_wrap(~p_1m)+
   theme_bw()+ 
-  scale_fill_discrete(name="Alpha")+
+  scale_color_discrete(name="Alpha")+
   labs(title = "Distribution of Number of Detections Across Capture Histories", subtitle= "Facetted by Detection Probability. Capture Occasion = 5.", x = "Detections per Individual",y = "% of Individuals Detected ")
 ```
 
@@ -530,8 +544,20 @@ dfCompareEstimates
 
 # Tables
 
+
 ```{r}
-dfEstimatesFinal$bCoverage = ifelse(dfEstimatesFinal$trueValue >= dfEstimatesFinal$lcl & dfEstimatesFinal$trueValue <= dfEstimatesFinal$ucl,1,0)
+# boolean for if a value is in the confidence interval or not
+dfEstimatesFinal$bCoverage = ifelse(dfEstimatesFinal$trueValues >= dfEstimatesFinal$lcl & dfEstimatesFinal$trueValues <= dfEstimatesFinal$ucl,1,0)
+
+# find cases where bCoverage = 0, and check to make sure it's not a tolerance issue; if trueValue = lcl or ucl, change bCoverage boolean to 1
+lclTrue = mapply(function(x, y) {isTRUE(all.equal(x, y))}, dfEstimatesFinal$trueValues, dfEstimatesFinal$lcl)
+uclTrue = mapply(function(x, y) {isTRUE(all.equal(x, y))}, dfEstimatesFinal$trueValues, dfEstimatesFinal$ucl)
+dfEstimatesFinal[which(lclTrue),"bCoverage"] = 1
+dfEstimatesFinal[which(uclTrue),"bCoverage"] = 1
+```
+
+```{r}
+
 dfEstimatesFinal$squaredError = (dfEstimatesFinal$estimate - dfEstimatesFinal$trueValues)^2
 dfEstimatesFinal$width = dfEstimatesFinal$ucl - dfEstimatesFinal$lcl
   
@@ -556,6 +582,8 @@ dfSummaryStats
 ```
 
 
+
+
 ## Plots on Table
 
 
@@ -570,7 +598,7 @@ ggplot(aes(x=p_1m, y = AvgNhat, color = as.factor(alpha)))+
   geom_line()+
   facet_wrap(~maxMinute)+
   theme_bw()+ 
-  labs(title  = "Average Population Estimates", subtitle = "N = 20",x= "1 Min Detection Probability (p_1m)",y = "Average N Estimate")+
+  labs(title  = "Average Population Estimates", subtitle = "N = 20",x= "Per Minute Detection Probability",y = "Average N Estimate")+
   scale_color_discrete(name = "Alpha")
 ```
 
@@ -595,7 +623,7 @@ ggplot(aes(x=p_1m, y = AvgNhat, color = as.factor(alpha)))+
   geom_ribbon(aes(ymin = avgLCL, ymax = avgUCL),alpha=0.1)+
   facet_wrap(~as.factor(alpha))+
   theme_bw()+ 
-  labs(title  = "Average Population Estimates and Standard Error", subtitle = "N = 20, 10 Capture Occasions.",x= "1 Min Detection Probability (p_1m)",y = "Average Population Estimate")+
+  labs(title  = "Average Population Estimates and Standard Error", subtitle = "N = 20, 10 Capture Occasions.",x= "Per Minute Detection Probability",y = "Average Population Estimate")+
   scale_color_discrete(name = "Alpha")
 ```
 
@@ -610,7 +638,35 @@ ggplot(aes(x=p_1m, y = AvgNhat, color = as.factor(alpha)))+
   geom_ribbon(aes(ymin = avgLCL, ymax = avgUCL),alpha=0.1)+
   facet_wrap(~as.factor(alpha))+
   theme_bw()+ 
-  labs(title  = "Average Population Estimates and Standard Error", subtitle = "N = 20, 5 Capture Occasions.",x= "1 Min Detection Probability (p_1m)",y = "Average Population Estimate")+
+  labs(title  = "Average Population Estimates and Standard Error", subtitle = "N = 20, 5 Capture Occasions.",x= "Per Minute Detection Probability",y = "Average Population Estimate")+
+  scale_color_discrete(name = "Alpha")
+```
+
+
+```{r}
+dfSummaryStats %>%
+  filter(N==10 & maxMinute == 10)%>%
+ggplot(aes(x=p_1m, y = AvgNhat, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  geom_ribbon(aes(ymin = avgLCL, ymax = avgUCL),alpha=0.1)+
+  facet_wrap(~as.factor(alpha))+
+  theme_bw()+ 
+  labs(title  = "Average Population Estimates and Standard Error", subtitle = "N = 10, 10 Capture Occasions.",x= "Per Minute Detection Probability",y = "Average Population Estimate")+
+  scale_color_discrete(name = "Alpha")
+```
+
+
+```{r}
+dfSummaryStats %>%
+  filter(N==10 & maxMinute == 5)%>%
+ggplot(aes(x=p_1m, y = AvgNhat, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  geom_ribbon(aes(ymin = avgLCL, ymax = avgUCL),alpha=0.1)+
+  facet_wrap(~as.factor(alpha))+
+  theme_bw()+ 
+  labs(title  = "Average Population Estimates and Standard Error", subtitle = "N = 10, 5 Capture Occasions.",x= "Per Minute Detection Probability",y = "Average Population Estimate")+
   scale_color_discrete(name = "Alpha")
 ```
 
@@ -829,7 +885,7 @@ ggplot(aes(x=p_1m, y = mse, color = as.factor(alpha)))+
   geom_line()+
   facet_wrap(~maxMinute)+
   theme_bw()+ 
-  labs(title  = "Mean Squared Error of Population Estimates", subtitle = "Facetted by Capture Occasions. N = 20. ",x= "1 Min Detection Probability (p_1m)",y = "Average MSE of Estimates")+
+  labs(title  = "Mean Squared Error of Population Estimates", subtitle = "Facetted by Capture Occasions. N = 20. ",x= "Per Minute Detection Probability",y = "Average MSE of Estimates")+
   scale_color_discrete(name = "Alpha")
 ```
 ```{r}
@@ -837,6 +893,17 @@ dfSummaryStats %>%
   filter(N==20 & p_1m %in% c(0.1,0.5)&alpha==0.05)
 ```
 
+```{r}
+dfSummaryStats %>%
+  filter(N==10)%>%
+ggplot(aes(x=p_1m, y = mse, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~maxMinute)+
+  theme_bw()+ 
+  labs(title  = "Mean Squared Error of Population Estimates", subtitle = "Facetted by Capture Occasions. N = 10. ",x= "Per Minute Detection Probability",y = "Average MSE of Estimates")+
+  scale_color_discrete(name = "Alpha")
+```
 
 
 ## Coverage
@@ -851,21 +918,50 @@ ggplot(aes(x=p_1m, y = coverage, color = as.factor(alpha)))+
   geom_line()+
   facet_wrap(~maxMinute)+
   theme_light()+ 
-  labs(title  = "Coverage Probability", subtitle = "Facetted by Capture Occasions. N = 20.", x= "1 Min Detection Probability (p_1m)",y = "Coverage Probability")+
+  labs(title  = "Coverage Probability", subtitle = "Facetted by Capture Occasions. N = 20.", x= "Per Minute Detection Probability",y = "Coverage Probability")+
+  scale_color_discrete(name = "Alpha")+
+  theme_bw()
+```
+
+to verify that cov probabilities make sense, note that cov probability when p = 0.5 and time = 5 is equivalent to cov probability when p = 0.3 andtime = 10. check prob of only being detected once to confirm that they have the same prob of being detected once?
+
+
+```{r}
+dfSummaryStats %>%
+  filter(N==10)%>%
+ggplot(aes(x=p_1m, y = coverage, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~maxMinute)+
+  theme_light()+ 
+  labs(title  = "Coverage Probability", subtitle = "Facetted by Capture Occasions. N = 10.", x= "Per Minute Detection Probability",y = "Coverage Probability")+
   scale_color_discrete(name = "Alpha")+
   theme_bw()
 ```
 
 
+### Check Coverage
+
 ```{r}
-dfSummaryStats %>%
-  filter(N==20)%>%
-ggplot(aes(x=p_1m, y = avgWidth , color = as.factor(alpha)))+ 
-  geom_point()+
-  geom_line()+
-  facet_wrap(~maxMinute)+
-  theme_bw()
+dfEstimatesFinal%>%
+  filter(variable == "N")%>% # only focus on N? or also use p??
+  group_by(p_1m,alpha,N,maxMinute,combinationNumber)%>%
+  summarise(c = sum(!is.na(estimate)),
+            cv = sum(bCoverage))
+
+testCov = dfEstimatesFinal%>%
+  filter(combinationNumber==99)
+testCov
 ```
+
+
+```{r}
+# i was having issues with testing if the floating point values are the same
+## https://stackoverflow.com/questions/9508518/why-are-these-numbers-not-equal 
+testCov$trueValues[10]>=testCov$lcl[10]
+all.equal(testCov$trueValues[10],testCov$lcl[10])
+```
+
 
 ```{r}
 dfSummaryStats %>%
