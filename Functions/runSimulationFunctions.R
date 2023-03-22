@@ -56,7 +56,7 @@ generateFormula = function(){
 ## assuming we have the data, fit the model, with necessary specifications
 ## use the parameters to determine which formula and model to use
 #Q: use real or beta df? fitModel(dfMark, bC=TRUE,bTime=TRUE, bAdditive=TRUE) vs fitModel(dfMark, bC=TRUE,bTime=TRUE, bAdditive=FALSE)
-fitModel = function(ch,strFormula="~1",strModel="Closed",nMixtures=1,scenarioSimNum="40"){
+fitModel = function(ch,strFormula="~1",strModel="Huggins",nMixtures=1,scenarioSimNum="40"){
   print("starting fit model")
   # fit the model 
   pformula = list(formula = eval(parse_expr(strFormula)),share=TRUE)
@@ -152,7 +152,7 @@ runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",
   
   # if bMixture is used, the first p value is p_i not p_1
   # code below gives us probability of detection if you belong in group 1
-  if(strModel!="Closed"){
+  if(strModel!="Huggins"){
     if(nrow(dfResults)==1){
       pResults = dfResults[1,]
     } else {
@@ -184,7 +184,7 @@ runSingleSimulation = function(N_i,p_1m=0.1,maxMinute=5,alpha=0,strFormula="~1",
 
 # function to automate outputs of the simulation
 # lstNi should ideally be generated using rnbinom() or rpois but I think it would make more sense to generate those numbers outside of these functions
-runSimulation = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstMaxMin = c(10),lstFormula=c("~1"),lstMixtures=c(1),seed=NULL,strModel="Closed",nScenario=NULL){
+runSimulation = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), lstAlpha = c(0,0.3), lstMaxMin = c(10),lstFormula=c("~1"),lstMixtures=c(1),seed=NULL,strModel="Huggins",nScenario=NULL){
   
   # initialize variables
   
@@ -286,8 +286,8 @@ calculateStatistics = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), l
   # filter out cases that did not run and weird estimates
   simData = simData %>%
     filter(estimate>=0)%>%
-    filter(estimate < 1000) %>%
-    filter(MarkEncounters==DataEncounters)
+    filter(estimate < 1000) #%>%
+    #filter(MarkEncounters==DataEncounters)
   
   
   # find summary stats
@@ -302,7 +302,7 @@ calculateStatistics = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), l
     summarise(AvgNhat = mean(estimate,na.rm=TRUE),
               AvgNhatSE= mean(se,na.rm=TRUE),
               sdNhat = sd(estimate,na.rm=TRUE),
-              biasNhat = AvgNhat - N,
+              #biasNhat = AvgNhat - N,
               mse = mean(squaredError,na.rm=TRUE),
               bias_SE_Nhat = AvgNhatSE - sdNhat,
               coverage = sum(bCoverage,na.rm=TRUE)/sum(!is.na(estimate)), # changed this from n() to sum(!is.na()) because I have some NA values for my estimates

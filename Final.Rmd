@@ -143,6 +143,7 @@ dfSummarisedFinal%>%
 ```
 
 
+
 ## Find Single Detections
 
 This tells us that in 94% of the scenarios generated, at least one individual was detected more than once. 
@@ -178,6 +179,45 @@ dfMultDetect = dfHistoryFinal %>%
 
 dfSingleDetection = dfHistoryFinal %>%
   filter(counts==1 & !(id %in% dfMultDetect$id))
+```
+
+## find mismatch
+
+Figure out which cases have more than one count
+```{r}
+dfMisMatch = dfEstimatesFinalUnClean %>%
+  filter(variable == "N") %>%
+  filter(MarkEncounters != DataEncounters)
+nMisMatch = nrow(dfMisMatch)
+print(nMisMatch)
+print(nMisMatch/nEstimates)
+
+nMultMisMatch = nrow(dfMisMatch %>%
+  filter(id %in% dfMultDetect$id))
+nMultMisMatch/nrow(dfMisMatch)
+
+dfMultMisMatch = dfMisMatch %>%
+  filter(id %in% dfMultDetect$id)
+head(dfMultMisMatch)
+```
+
+```{r}
+dfEstimatesFinalUnClean%>%
+  filter(id == "1_22" & variable!="N")
+```
+
+```{r}
+test = dfHistoryFinal %>%
+  filter(combinationNumber==1 & simulationNumber == 22) 
+test
+nrow(unique(test[,"ch"]))
+```
+
+
+
+```{r}
+ch = test[,"ch"]
+fitModel(ch)
 ```
 
 ## Likelihood 
@@ -289,15 +329,18 @@ dfMultMisMatch = dfMisMatch %>%
 head(dfMultMisMatch)
 ```
 
+
+
+
 ```{r}
-dfEstimatesFinalUnClean%>%
-  filter(combinationNumber==1 & simulationNumber == 22)
-test = dfHistoryFinal %>%
-  filter(combinationNumber==1 & simulationNumber == 22) 
-test
-nrow(unique(test[,"ch"]))
-ch = test[,"ch"]
-fitModel(ch)
+# dfEstimatesFinalUnClean%>%
+#   filter(combinationNumber==1 & simulationNumber == 22)
+# test = dfHistoryFinal %>%
+#   filter(combinationNumber==1 & simulationNumber == 22) 
+# test
+# nrow(unique(test[,"ch"]))
+# ch = test[,"ch"]
+# fitModel(ch)
 ```
 
 
@@ -398,6 +441,7 @@ dfEstimatesFinal %>%
 ```
 
 
+
 # Plots
 
 ## Population 20
@@ -458,7 +502,7 @@ ggplot()+
   geom_boxplot(aes(x=as.factor(p_1m), y = estimate, fill = as.factor(alpha)))+ 
   geom_hline(aes(yintercept = trueValues),color = "darkblue",linetype="dotted")+
   labs(title = "Population Estimates Facetted by Time", subtitle = "10 Individuals in Population. 5 and 10 Minute Facet Times.")+
-  facet_wrap(~maxMinute)+ 
+  facet_wrap(~maxMinute,scales="free")+ 
   scale_fill_discrete(name = "Alpha")+ 
   labs(x= "Per Minute Detection Probability",y = "Estimate")+
   theme_bw()
@@ -542,6 +586,7 @@ dfCompareEstimates
 ```
 
 
+
 # Tables
 
 
@@ -585,7 +630,18 @@ dfSummaryStats
 
 
 ## Plots on Table
-
+Standard error as detection probability changes
+```{r}
+dfSummaryStats%>%
+  filter(N==10)%>%
+ggplot()+
+  geom_point(aes(x=p_1m, y = AvgNhatSE, color = as.factor(maxMinute)))+
+  geom_line(aes(x=p_1m, y = AvgNhatSE, color = as.factor(maxMinute)))+
+  facet_wrap(~alpha)+
+  theme_bw()+
+  labs(title = "Average Population Standard Error", subtitle = "N = 10. Facetted by Alpha",x="Per Minute Detection Probability",y="Average SE")+
+  scale_color_discrete(name = "Capture Occasions")
+```
 
 The order of the average n values is as expected - as alpha increases, estimates of n should increase. I'm curious about the trend though. Namely, shouldn't the average n always be increasing as we increase p? Or at least kind of stabilize. When time = 5 I see this, but when time = 10, I'm confused about it. 
 
@@ -621,7 +677,7 @@ ggplot(aes(x=p_1m, y = AvgNhat, color = as.factor(alpha)))+
   geom_point()+
   geom_line()+
   geom_ribbon(aes(ymin = avgLCL, ymax = avgUCL),alpha=0.1)+
-  facet_wrap(~as.factor(alpha))+
+  facet_wrap(~as.factor(alpha),scales="free")+
   theme_bw()+ 
   labs(title  = "Average Population Estimates and Standard Error", subtitle = "N = 20, 10 Capture Occasions.",x= "Per Minute Detection Probability",y = "Average Population Estimate")+
   scale_color_discrete(name = "Alpha")
@@ -735,7 +791,7 @@ dfEstimatesFinal%>%
   geom_line(aes(x=maxMinute,y=avgEstimate,color=as.factor(p_1m)))+
   facet_wrap(~alpha,scales="free")+
   theme_bw()+
-  labs(title = "Interaction Plot Between Capture Occasion and Detection Probability",subtitle = "Facetted by Alpha",x = "Number of Capture Occasions",y = "Mean Population Estimate")+
+  labs(title = "Interaction Plot (Capture Occasion & Detection Probability)",subtitle = "Facetted by Alpha",x = "Number of Capture Occasions",y = "Mean Population Estimate")+
   scale_color_discrete(name = "Detection Probability")
 
 ```
@@ -892,6 +948,14 @@ ggplot(aes(x=p_1m, y = mse, color = as.factor(alpha)))+
 dfSummaryStats %>%
   filter(N==20 & p_1m %in% c(0.1,0.5)&alpha==0.05)
 ```
+
+
+```{r}
+dfSummaryStats %>%
+  filter(N==20 & p_1m %in% c(0.4)&alpha %in% c(0,0.05) & maxMinute == 10)%>%
+  select(p_1m, alpha, N, maxMinute, AvgNhat, AvgNhatSE, biasNhat, mse, coverage)
+```
+
 
 ```{r}
 dfSummaryStats %>%

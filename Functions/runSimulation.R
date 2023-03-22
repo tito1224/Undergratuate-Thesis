@@ -30,15 +30,16 @@ id = as.integer(args[1])
 # lstSeed = c("NULL")
 # strModel = "Closed"
 
-nRuns = 500
+nRuns = 1000
 lstNi = c(10,20)
 lstP = c(0.1,0.2,0.3,0.4,0.5)
+#lstAlpha = c(0)
 lstAlpha =c(0,0.05,0.1,0.2,0.3)
 lstMaxMin = c(5,10)
 lstFormula = c("~1")
 lstMixtures = c(1)
 lstSeed = c("NULL")
-strModel = "Closed"
+strModel = "Huggins"
 
 params = expand.grid(nRuns,lstNi,lstP, lstAlpha, lstMaxMin,lstFormula,lstMixtures,lstSeed,strModel)
 colnames(params) = c("nRuns","lstNi","lstP","lstAlpha","lstMaxMin","lstFormula","lstMixtures","lstSeed","strModel")
