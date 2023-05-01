@@ -37,26 +37,27 @@ source("./Functions/runSimulationFunctions.R")
 ```
 
 
-Load data - don't touch this. Temporarily set the working directory to load the data - will automatically return to current working directory after this chunk runs. 
+Load data - don't touch this. Temporarily set the working directory to load the data - will automatically return to current working directory after this chunk runs. The data in this folder is for 100 unique scenarios, with 1000 replicates. The scenarios are shown later on in the code and is called the "params" dataframe. The scenarios used to generate this data can also be found in the "./Functions/runSimulation.R" file. 
 ```{r}
-setwd("~/Rcode/Undergratuate-Thesis/DigitalAllianceOutput/Huggins")
-dataFinalTrial = list.files(pattern = ".rds")
+setwd("./DigitalAllianceOutput/Huggins")
+dataFinalTrial = list.files(pattern = ".rds") # load rds files
 dataFinalTrial = mixedsort(dataFinalTrial)%>% # use mixedsort so it appears in ascending order 
   map(readRDS)
 
+# initialize empty dataframes to store the data
 dfSummarisedFinalH= data.frame()
 dfEstimatesFinalH = data.frame()
 dfHistoryFinalH = data.frame()
 #counter = 1
+
+# loop through the rds files and retrive data 
 for (item in dataFinalTrial){
-  tempSummarisedResults = item[[1]] # retrieve the summary stats
-  tempCalculations = item[[2]]
-  tempHistory= item[[3]]
-  #tempSummarisedResults$id = counter
-  #tempCalculations$id = counter
-  #tempHistory$id = counter
+  tempSummarisedResults = item[[1]] # retrieve the summary stats; this df is useless because extreme values have not been removed; ignore
+  tempCalculations = item[[2]] # load estimates for each run (should be 200,000 rows - 100,000 estimates of N, and 100,000 estimates of p)
+  tempHistory= item[[3]] # load the detection histories used to generate the histories 
+
   
-  
+  # add data points to final dataframe
   dfSummarisedFinalH = rbind(dfSummarisedFinalH,tempSummarisedResults)
   dfEstimatesFinalH = rbind(dfEstimatesFinalH, tempCalculations)
   dfHistoryFinalH = rbind(dfHistoryFinalH, tempHistory)
@@ -66,7 +67,7 @@ for (item in dataFinalTrial){
 
 # Outliers
 
-Some code to add identifiers to the data. Combination number will identify the variables used to create the scenario. Simulation number will identify the datapoints actually generated. There are 1000 simulation numbers for every combination number! The variable `params` is created in one of the code chunks below, and shows the variables associated with each combination number.
+Some code to add identifiers to the data. Combination number will identify the variables used to create the scenario - or just "scenario". Simulation number will identify the run number - or datapoints actually generated. There are 1000 simulation numbers for every combination number! The variable `params` is created in one of the code chunks below, and shows the variables associated with each combination number.
 
 ```{r}
 # id is combinationNumber_simulationNumber
@@ -77,7 +78,6 @@ dfEstimatesFinalHUnClean = copy(dfEstimatesFinalH)
 ```
 
 26 cases did not run because no detections were made, which is fair.
-
 ```{r}
 dfOutliers = dfEstimatesFinalHUnClean %>%
   filter(variable == "N") %>%
@@ -90,9 +90,9 @@ print(nOutliers/nEstimates)
 dfOutliers
 ```
 
-The params dataset represents the scenarios/environment used to simiulate data for each combination number. Add it to the dataset of final estimates to help calculate summary statistics.
-
+The params dataset represents the scenarios/environment used to simulate data for each combination number. Add it to the dataset of final estimates to help calculate summary statistics.
 ```{r}
+# this code is what was used in the ./Functions/runSimulation.R file to generate scenarios to input into the HPC 
 nRuns = 1000
 lstNi = c(10,20)
 lstP = c(0.1,0.2,0.3,0.4,0.5)
@@ -107,16 +107,19 @@ strModel = "Huggins"
 params = expand.grid(nRuns,lstNi,lstP, lstAlpha, lstMaxMin,lstFormula,lstMixtures,lstSeed,strModel)
 colnames(params) = c("nRuns","N","p_1m","alpha","maxMinute","strFormula","lstMixtures","lstSeed","strModel")
 params$Scenario = 1:nrow(params)
-dfEstimatesFinalH = left_join(dfEstimatesFinalH,params,by=c("combinationNumber"="Scenario"))
 
+# merge the params dataframe with the dataframe of estimates to help with calculating summary statistics 
+dfEstimatesFinalH = left_join(dfEstimatesFinalH,params,by=c("combinationNumber"="Scenario")) 
+
+# some code to help with calculating summary statistics -> full summary not done yet, but these are intermediate steps needed 
+# to determine things like coverage probability, MSE, etc
 dfEstimatesFinalH$bCoverage = ifelse(dfEstimatesFinalH$trueValue >= dfEstimatesFinalH$lcl & dfEstimatesFinalH$trueValue <= dfEstimatesFinalH$ucl,1,0)
 dfEstimatesFinalH$squaredError = (dfEstimatesFinalH$estimate - dfEstimatesFinalH$trueValues)^2
 dfEstimatesFinalH$width = dfEstimatesFinalH$ucl - dfEstimatesFinalH$lcl
   
 ```
 
-Create a dataframe of summarized variables. This is before outliers have been removed btw.
-
+Create a dataframe of summarized variables. This is before outliers have been removed.
 ```{r}
 dfSummarisedFinalH = dfEstimatesFinalH %>%
   filter(variable == "N")%>% # only focus on N? or also use p??
@@ -132,13 +135,11 @@ dfSummarisedFinalH = dfEstimatesFinalH %>%
 ```
 
 Lack of removing extreme estimates is seen here - work to remove outliers is done in the next section!
-
 ```{r}
 head(dfSummarisedFinalH)
 ```
 
 Quick check to see which scenarios caused the capture histories where no detections were made. These are scenarios with low detection probabilities, and short time intervals for the most part, and also a low number of total individuals (N) in the population.
-
 ```{r}
 lstNoDetect = unique(dfOutliers$combinationNumber)
 dfSummarisedFinalH[dfSummarisedFinalH$combinationNumber%in% lstNoDetect,]
@@ -219,8 +220,7 @@ funcConditionalLikelihood= function(p,n_k,K){
 }
 ```
 
-The graph below shows us that in order to maximize the log likelihood p needs to be extremely close to 0. The estimator for N (after taking the derivative of the conditional log likelihood wrt to p and setting equal to 0 to find an estimate of $\hat{p}$) is:
-
+The graph below shows us that in order to maximize the log likelihood, p needs to be extremely close to 0. The estimator for N (after taking the derivative of the conditional log likelihood wrt to p and setting equal to 0 to find an estimate of $\hat{p}$) is the Horvitz-Thompson estimator.
 ```{r}
 #funcConditionalLikelihood(c(2,1,3), 0.1, 3)
 
@@ -233,13 +233,12 @@ ggplot(ll_data)+
   theme_bw()+ 
   labs(title = "Conditional Log-Likelihood for 3 Individuals Detected Only Once", subtitle = "Capture Occasions = 5", x= "p", y = "Log-Likelihood")
 
-ggsave("C:/Users/titom/OneDrive/Documents/Rcode/Undergratuate-Thesis/Images/likelihhod.jpg")
+#ggsave("./Images/likelihhod.jpg")
 ```
 
 ## Find Single Detections
 
 This tells us that in 94% of the scenarios generated, at least one individual was detected more than once.
-
 ```{r}
 colnamesUse= paste0("Minute",1:10)
 dfHistoryFinalH$counts = rowSums(dfHistoryFinalH[,colnamesUse],na.rm=TRUE)
@@ -254,7 +253,6 @@ nMultDetect/nEstimates
 ```
 
 Doing this just to make sure I'm filtering data right. Shows that in 5.38% of the generated scenarios, there are datasets with only 1 detection per individual. Pretty small number, so it is fair to remove them.
-
 ```{r}
 nMultDetect = dfHistoryFinalH %>%
   filter(counts>1)
@@ -268,7 +266,6 @@ nSingleDetection/nEstimates
 ```
 
 Store for usage later on.
-
 ```{r}
 dfMultDetect = dfHistoryFinalH %>%
   filter(counts>1)
@@ -280,7 +277,6 @@ dfSingleDetection = dfHistoryFinalH %>%
 ## Exploratory Analysis
 
 Add some important data to the dfHistory dataframe for further analysis
-
 ```{r}
 dfHistoryFinalH = left_join(dfHistoryFinalH,dfSummarisedFinalH[,1:6], by= "combinationNumber")
 ```
@@ -290,7 +286,6 @@ head(dfHistoryFinalH)
 ```
 
 Make a dataframe to store the number of **unique** individuals detected for each simulation number
-
 ```{r}
 dfPointCounts = dfHistoryFinalH%>%
   group_by(p_1m,alpha,N,maxMinute,id)%>%
@@ -331,30 +326,20 @@ ggsave("C:/Users/titom/OneDrive/Documents/Rcode/Undergratuate-Thesis/Images/Poin
 
 ```{r}
 # filter out cases that did not run
-# dfEstimatesFinalH = dfEstimatesFinalH %>%
-#   filter(estimate>=0 & estimate < 200 & !is.na(estimate))
-
-# filter out mismatching unique encounter histories
 dfEstimatesFinalH = dfEstimatesFinalHUnClean %>%
   filter(variable == "N") %>%
   filter(estimate>=0) %>%
-  filter(!(id %in% dfSingleDetection$id))#%>%
-  #filter(!(id %in% dfMisMatch$id))
+  filter(!(id %in% dfSingleDetection$id))
 
-dfEstimatesProbability = dfEstimatesFinalHUnClean %>%
+dfEstimatesProbability = dfEstimatesFinalHUnClean %>% # these are probability estimates; not really needed for this project
   filter(variable == "p g1 t1") %>%
   filter(estimate>=0) %>%
   filter(!(id %in% dfSingleDetection$id))
 ```
 
-Total outliers make up appx 10% of the data if we include mis matches and 6% of the data if we do not include mismatches
 
 ```{r}
-1 - (nrow(dfEstimatesFinalH)/nEstimates)
-```
-
-```{r}
-#add p,alpha,N, etc
+#add p,alpha,N, etc to help with graphing
 dfSummarisedFinalH = dfSummarisedFinalH[!(duplicated(dfSummarisedFinalH$combinationNumber)),]
 dfEstimatesFinalH = left_join(dfEstimatesFinalH, dfSummarisedFinalH[,1:6], by= "combinationNumber")
 dfEstimatesProbability  =  left_join(dfEstimatesProbability, dfSummarisedFinalH[,1:6], by= "combinationNumber")
@@ -365,7 +350,6 @@ head(dfEstimatesFinalH)
 ```
 
 Make sure there are approximately equal data points across all scenarios. The scenarios with less than 500 data points by a significant amount are the ones with lowest detection probability and high alpha and/or low N. Makes sense because we end up with more cases of single detections here.
-
 ```{r}
 dfEstimatesFinalH %>%
   filter(variable == "N")%>%
@@ -376,15 +360,12 @@ dfEstimatesFinalH %>%
 
 # Plots
 
-
-
 ```{r}
 dfEstimatesPop = dfEstimatesFinalH %>%
   filter(N==20)
 ```
 
 Make sure they all have around the same data points - 600+ data points per scenario.
-
 ```{r}
 dfEstimatesPop %>%
   filter(variable == "N")%>%
@@ -425,7 +406,7 @@ ggplot()+
   labs(x= "Per Minute Detection Probability",y = "Estimate")+
   theme_bw()
 
-ggsave("C:/Users/titom/OneDrive/Documents/Rcode/Undergratuate-Thesis/Images/Population_Estimates_20.jpg")
+#ggsave("./Images/Population_Estimates_20.jpg")
 ```
 
 ```{r}
@@ -439,11 +420,10 @@ ggplot()+
   scale_fill_discrete(name = "Alpha")+ 
   labs(x= "Per Minute Detection Probability",y = "Estimate")+
   theme_bw()
-ggsave("C:/Users/titom/OneDrive/Documents/Rcode/Undergratuate-Thesis/Images/Population_Estimates_10.jpg")
+#ggsave("./Images/Population_Estimates_10.jpg")
 ```
 
-How many individuals are detected, once, twice, etc for N = 20 and maxMinute = 10.
-
+How many individuals are detected, once, twice, etc for N = 20 and maxMinute = 10. Used to make the graph of the distribution of detections per Individual.
 ```{r}
 dfCounts = dfHistoryFinalH %>%
   filter(N==20 & maxMinute == 10 & p_1m != 0.3)%>%
@@ -500,10 +480,6 @@ dfCounts%>%
 ```
 
 
-
-
-
-
 ```{r}
 dfCounts = dfHistoryFinalH %>%
   filter(N==20 & maxMinute == 5 & p_1m != 0.3)%>%
@@ -523,7 +499,7 @@ dfEstimatesProbability%>%
  
 ```
 
-For use in a table in the report.
+For use in a table in the report. Shows how sd becomes smaller as p_1m becomes larger. 
 ```{r}
 dfCompareEstimates = dfEstimatesFinalH%>%
   filter(alpha==0.3  & p_1m %in% c(0.1,0.2,0.3,0.4,0.5) & N == 20, maxMinute == 10)%>%
@@ -532,13 +508,9 @@ dfCompareEstimates = dfEstimatesFinalH%>%
             `Standard Deviation`=round(sd(estimate),1))%>%
   rename(`Capture Occasions` = maxMinute)
 dfCompareEstimates
-# dfCompareEstimates = dfCompareEstimates%>%
-#   gt()%>%
-#   gt_theme_nytimes()
-# gtsave(dfCompareEstimates, "compareEstimates.png")
+
 ```
-
-
+Also for use in report. Showing how SD becomes smaller as p_1m becomes bigger
 ```{r}
 dfEstimatesFinalH%>%
   filter(alpha==0.3  & p_1m %in% c(0.1,0.5) & N == 20)%>%
@@ -551,10 +523,13 @@ dfEstimatesFinalH%>%
 
 
 # Tables
-
+This is a summary table of all scenarios. 100 rows because I have 100 scenarios for my data. 
 ```{r}
 # boolean for if a value is in the confidence interval or not
-dfEstimatesFinalH$lcl = round(dfEstimatesFinalH$lcl)
+# rounding the lower confidence level because sometimes the estimate is something like 19.999 and the lower confidence interval is 20 
+# in a case like that, the estimate really should be included in the confidence interval - the 0.0001 difference is a technicality 
+# also ran into issues like then when maximinizing the full likelihood - with conditional likelihood it really does not happen that much
+dfEstimatesFinalH$lcl = round(dfEstimatesFinalH$lcl) 
 dfEstimatesFinalH$bCoverage = ifelse(dfEstimatesFinalH$trueValues >= dfEstimatesFinalH$lcl & dfEstimatesFinalH$trueValues <= dfEstimatesFinalH$ucl,1,0)
 
 # find cases where bCoverage = 0, and check to make sure it's not a tolerance issue; if trueValue = lcl or ucl, change bCoverage boolean to 1
@@ -565,7 +540,6 @@ dfEstimatesFinalH[which(uclTrue),"bCoverage"] = 1
 ```
 
 ```{r}
-
 dfEstimatesFinalH$squaredError = (dfEstimatesFinalH$estimate - dfEstimatesFinalH$trueValues)^2
 dfEstimatesFinalH$width = dfEstimatesFinalH$ucl - dfEstimatesFinalH$lcl
   
@@ -637,10 +611,7 @@ ggplot()+
 ```
 
 
-The order of the average n values is as expected - as alpha increases, estimates of n should increase. I'm curious about the trend though. Namely, shouldn't the average n always be increasing as we increase p? Or at least kind of stabilize. When time = 5 I see this, but when time = 10, I'm confused about it.
-
--   **Can I attribute these downward movements to just randomized data points**
-
+The order of the average n values is as expected - as alpha increases, estimates of n should increase. I'm curious about the trend though. Namely, shouldn't the average n always be increasing as we increase p? Or at least kind of stabilize. When time = 5 I see this, but when time = 10, I'm confused about it. Maybe high detection probability makes up for the fact that we are miscounting and reduces bias?
 ```{r}
 dfSummaryStatsH %>%
   filter(N==20)%>%
@@ -654,16 +625,6 @@ ggplot(aes(x=p_1m, y = AvgNhat, color = as.factor(alpha)))+
 ```
 
 ```{r}
-# dfSummaryStatsH %>%
-#   filter(N==20 & maxMinute == 10)%>%
-# ggplot(aes(x=p_1m, y = AvgNhat, color = as.factor(alpha)))+ 
-#   geom_point()+
-#   geom_line()+
-#   geom_ribbon(aes(ymin = AvgNhat - AvgNhatSE, ymax = AvgNhat + AvgNhatSE),alpha=0.1)+
-#   facet_wrap(~as.factor(alpha))+
-#   theme_bw()+ 
-#   labs(title  = "Average Population Estimates and Standard Error", subtitle = "N = 20, 10 Capture Occasions.",x= "1 Min Detection Probability (p_1m)",y = "Average Population Estimate")+
-#   scale_color_discrete(name = "Alpha")
 dfSummaryStatsH %>%
   filter(N==20 & maxMinute == 10)%>%
 ggplot(aes(x=p_1m, y = AvgNhat, color = as.factor(alpha)))+ 
@@ -676,7 +637,7 @@ ggplot(aes(x=p_1m, y = AvgNhat, color = as.factor(alpha)))+
   labs(title  = "Average Population Estimates With Confidence Intervals", subtitle = "Population N = 20. Capture occasions = 10.",x= "Per Minute Detection Probability",y = "Average Population Estimate")+
   scale_color_discrete(name = "Alpha")
 
-ggsave("C:/Users/titom/OneDrive/Documents/Rcode/Undergratuate-Thesis/Images/avg_pop_est.jpg",width=10,height=5)
+#ggsave("./Images/avg_pop_est.jpg",width=10,height=5)
 ```
 
 
@@ -708,7 +669,7 @@ ggplot(aes(x=p_1m, y = AvgNhat, color = as.factor(alpha)))+
   labs(title  = "Average Population Estimates With Confidence Intervals", subtitle = "Population N = 10. Capture occasions = 5.",x= "Per Minute Detection Probability",y = "Average Population Estimate")+
   scale_color_discrete(name = "Alpha")
 
-ggsave("C:/Users/titom/OneDrive/Documents/Rcode/Undergratuate-Thesis/Images/avg_pop_est_10_5.jpg",width=10,height=5)
+#ggsave("./Images/avg_pop_est_10_5.jpg",width=10,height=5)
 ```
 
 
@@ -725,7 +686,7 @@ ggplot(aes(x=p_1m, y = AvgNhat, color = as.factor(alpha)))+
   labs(title  = "Average Population Estimates With Confidence Intervals", subtitle = "Population N = 20. Capture occasions = 5.",x= "Per Minute Detection Probability",y = "Average Population Estimate")+
   scale_color_discrete(name = "Alpha")
 
-ggsave("C:/Users/titom/OneDrive/Documents/Rcode/Undergratuate-Thesis/Images/avg_pop_est_5.jpg",width=10,height=5)
+#ggsave("./Images/avg_pop_est_5.jpg",width=10,height=5)
 ```
 
 
@@ -743,52 +704,10 @@ ggplot(aes(x=p_1m, y = AvgNhat, color = as.factor(alpha)))+
   labs(title  = "Average Population Estimates With Confidence Intervals", subtitle = "Population N = 10. Capture occasions = 10.",x= "Per Minute Detection Probability",y = "Average Population Estimate")+
   scale_color_discrete(name = "Alpha")
 
-ggsave("C:/Users/titom/OneDrive/Documents/Rcode/Undergratuate-Thesis/Images/avg_pop_est_10.jpg",width=10,height=5)
+#ggsave("./Images/avg_pop_est_10.jpg",width=10,height=5)
 ```
 
-Relationship between bias and variance 
-
-```{r}
-dfSummaryStatsH%>%
-  filter(N==20 & maxMinute==10)%>%
-  ggplot()+ 
-  geom_point(aes(x=p_1m, y = biasNhat^2, color = "Average Squared Bias" ,shape=as.factor(alpha)))+
-  geom_point(aes(x=p_1m, y = AvgNhatVar, color = "Average Variance of N" ,shape=as.factor(alpha)))+
-  geom_line(aes(x=p_1m, y = biasNhat^2, color = "Average Squared Bias" ))+
-  geom_line(aes(x=p_1m, y = AvgNhatVar, color = "Average Variance of N" ))+
-  #geom_ribbon(aes(ymin = avgLCL, ymax = avgUCL),alpha=0.1)+
-  facet_wrap(~as.factor(alpha),scales = "free")+
-  #facet_grid(~as.factor(alpha),space="free")+
-  theme_bw()+ 
-  labs(title  = "Bias and Variance Across Detection Probability", subtitle = "Facetted by Alpha. Population N = 20. Capture occasions = 10.",x= "Per Minute Detection Probability",y = "Average Population Estimate")+
-  scale_color_discrete(name = "Terms")+
-  scale_shape_discrete(name = "Alpha")
-
-ggsave("C:/Users/titom/OneDrive/Documents/Rcode/Undergratuate-Thesis/Images/bias_var_20.jpg",width=10,height=5)
-```
-
-```{r}
-dfSummaryStatsH%>%
-  filter(N==20 & maxMinute==5)%>%
-  ggplot()+ 
-  geom_point(aes(x=p_1m, y = biasNhat^2, color = "Average Squared Bias" ,shape=as.factor(alpha)))+
-  geom_point(aes(x=p_1m, y = AvgNhatVar, color = "Average Variance of N" ,shape=as.factor(alpha)))+
-  geom_line(aes(x=p_1m, y = biasNhat^2, color = "Average Squared Bias" ))+
-  geom_line(aes(x=p_1m, y = AvgNhatVar, color = "Average Variance of N" ))+
-  #geom_ribbon(aes(ymin = avgLCL, ymax = avgUCL),alpha=0.1)+
-  facet_wrap(~as.factor(alpha),scales = "free")+
-  #facet_grid(~as.factor(alpha),space="free")+
-  theme_bw()+ 
-  labs(title  = "Bias and Variance Across Detection Probability", subtitle = "Facetted by Alpha. Population N = 20. Capture occasions = 5.",x= "Per Minute Detection Probability",y = "Average Population Estimate")+
-  scale_color_discrete(name = "Terms")+
-  scale_shape_discrete(name = "Alpha")
-
-ggsave("C:/Users/titom/OneDrive/Documents/Rcode/Undergratuate-Thesis/Images/bias_var_5.jpg",width=10,height=5)
-```
-
-
-
-
+For use in presentation/report. Just showing some numbers and comparing how key summary stats change
 ```{r}
 dfSummaryStatsH%>%
   filter(p_1m %in% c(0.1,0.5) & alpha %in% c(0,0.05)& N==20 & maxMinute == 10)%>%
@@ -850,7 +769,7 @@ dfEstimatesFinalH%>%
   labs(title = "Interaction Between Alpha and Detection Probability",subtitle = "Facetted by Alpha",x = "Number of Capture Occasions",y = "Mean Population Estimate")+
   scale_color_discrete(name = "Detection Probability")
 
-ggsave("C:/Users/titom/OneDrive/Documents/Rcode/Undergratuate-Thesis/Images/interac.jpg")
+#ggsave("./Images/interac.jpg")
 ```
 
 All significant.
@@ -862,29 +781,6 @@ aov1 = aov(estimate ~ as.factor(maxMinute)*as.factor(p_1m), data = dfAnova)
 summary(aov1)
 ```
 
-## Why does p=0.2 cause a jump then fall
-
-```{r}
-dfSummaryStatsH %>%
-  filter(N==20 & maxMinute == 5)%>%
-ggplot(aes(x=p_1m, y = medianNhat, color = as.factor(alpha)))+ 
-  geom_point()+
-  geom_line()+
-  geom_ribbon(aes(ymin = medianNhat - AvgNhatSE, ymax = medianNhat + AvgNhatSE),alpha=0.1)+
-  facet_wrap(~as.factor(alpha))+
-  theme_bw()+ 
-  labs(title  = "Median Population Estimates", subtitle = "N = 20, 5 Capture Occasions.",x= "1 Min Detection Probability (p_1m)",y = "Average Population Estimate")+
-  scale_color_discrete(name = "Alpha")
-```
-
-```{r}
-dfHistoryFinalH%>%
-  filter(p_1m==0.2 & N == 20 & maxMinute==5)%>%
-  group_by(id,ch)%>%
-  mutate(n = n())%>%
-  group_by(ch)%>%
-  summarise(avg = mean(n))
-```
 
 ## Why SE decrease
 
@@ -914,11 +810,13 @@ ggplot(aes(x=p_1m, y = AvgNhatSE, color = as.factor(alpha)))+
   scale_color_discrete(name = "Alpha")
 ```
 
-## mse
+## MSE
 
 It makes sense that MSE is largest when alpha is largest because we are introducing more individuals into the data than there should be. As probability of detection increases, for a fixed alpha, I assumed mse should be increasing. This is because we are detecting more individuals, which means more opportunities for us to miscount.
 
 -   **So if this is the case, for when alpha = 0.3, why is mse decreasing?**
+
+- ANS: think of $MSE(\hat{\theta}) = Var(\hat{\theta})+ Bias(\hat{\theta})^2$. Bias is the same but standard error ($\sqrt{Var({\hat{\theta})}}$) keeps falling (from what we have seen in the graphs earlier. So that explains the reason we see this convergence to a value (which is bias squared).
 
 ```{r}
 dfSummaryStatsH %>%
@@ -931,15 +829,13 @@ ggplot(aes(x=p_1m, y = mse, color = as.factor(alpha)))+
   labs(title  = "Mean Squared Error of Population Estimates", subtitle = "Facetted by capture occasions. Population N = 20. ",x= "Per Minute Detection Probability",y = "Average MSE of Estimates")+
   scale_color_discrete(name = "Alpha")
 
-ggsave("C:/Users/titom/OneDrive/Documents/Rcode/Undergratuate-Thesis/Images/mse.jpg")
+#ggsave("./Images/mse.jpg")
 ```
 
 ```{r}
 dfSummaryStatsH %>%
   filter(N==20 & p_1m %in% c(0.1,0.5)&alpha %in% c(0,0.05) & maxMinute == 10)
 ```
-
-
 
 ```{r}
 dfSummaryStatsH %>%
@@ -952,7 +848,48 @@ ggplot(aes(x=p_1m, y = mse, color = as.factor(alpha)))+
   labs(title  = "Mean Squared Error of Population Estimates", subtitle = "Facetted by capture occasions. Population N = 10. ",x= "Per Minute Detection Probability",y = "Average MSE of Estimates")+
   scale_color_discrete(name = "Alpha")
 
-ggsave("C:/Users/titom/OneDrive/Documents/Rcode/Undergratuate-Thesis/Images/mse_10.jpg")
+#ggsave("./Images/mse_10.jpg")
+```
+
+
+
+Relationship between bias and variance 
+```{r}
+dfSummaryStatsH%>%
+  filter(N==20 & maxMinute==10)%>%
+  ggplot()+ 
+  geom_point(aes(x=p_1m, y = biasNhat^2, color = "Average Squared Bias" ,shape=as.factor(alpha)))+
+  geom_point(aes(x=p_1m, y = AvgNhatVar, color = "Average Variance of N" ,shape=as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = biasNhat^2, color = "Average Squared Bias" ))+
+  geom_line(aes(x=p_1m, y = AvgNhatVar, color = "Average Variance of N" ))+
+  #geom_ribbon(aes(ymin = avgLCL, ymax = avgUCL),alpha=0.1)+
+  facet_wrap(~as.factor(alpha),scales = "free")+
+  #facet_grid(~as.factor(alpha),space="free")+
+  theme_bw()+ 
+  labs(title  = "Bias and Variance Across Detection Probability", subtitle = "Facetted by Alpha. Population N = 20. Capture occasions = 10.",x= "Per Minute Detection Probability",y = "Average Population Estimate")+
+  scale_color_discrete(name = "Terms")+
+  scale_shape_discrete(name = "Alpha")
+
+#ggsave("./Images/bias_var_20.jpg",width=10,height=5)
+```
+
+```{r}
+dfSummaryStatsH%>%
+  filter(N==20 & maxMinute==5)%>%
+  ggplot()+ 
+  geom_point(aes(x=p_1m, y = biasNhat^2, color = "Average Squared Bias" ,shape=as.factor(alpha)))+
+  geom_point(aes(x=p_1m, y = AvgNhatVar, color = "Average Variance of N" ,shape=as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = biasNhat^2, color = "Average Squared Bias" ))+
+  geom_line(aes(x=p_1m, y = AvgNhatVar, color = "Average Variance of N" ))+
+  #geom_ribbon(aes(ymin = avgLCL, ymax = avgUCL),alpha=0.1)+
+  facet_wrap(~as.factor(alpha),scales = "free")+
+  #facet_grid(~as.factor(alpha),space="free")+
+  theme_bw()+ 
+  labs(title  = "Bias and Variance Across Detection Probability", subtitle = "Facetted by Alpha. Population N = 20. Capture occasions = 5.",x= "Per Minute Detection Probability",y = "Average Population Estimate")+
+  scale_color_discrete(name = "Terms")+
+  scale_shape_discrete(name = "Alpha")
+
+#ggsave("./Images/bias_var_5.jpg",width=10,height=5)
 ```
 
 ## Coverage
@@ -971,7 +908,7 @@ ggplot(aes(x=p_1m, y = coverage, color = as.factor(alpha)))+
   scale_color_discrete(name = "Alpha")+
   theme_bw()
 
-ggsave("C:/Users/titom/OneDrive/Documents/Rcode/Undergratuate-Thesis/Images/coverage.jpg")
+#ggsave("./Images/coverage.jpg")
 ```
 
 ```{r}
@@ -993,11 +930,12 @@ ggplot(aes(x=p_1m, y = coverage, color = as.factor(alpha)))+
   scale_color_discrete(name = "Alpha")+
   theme_bw()
 
-ggsave("C:/Users/titom/OneDrive/Documents/Rcode/Undergratuate-Thesis/Images/coverage10.jpg")
+#ggsave(./Images/coverage10.jpg")
 ```
 
 ### Check Coverage
 
+This section was for when I was still maximizing the full likelihood. Even though the lcl would say 20, and my estimate would say 20, because they were floats, my estimate of 20.00000001 was said to note be 20 -> fixed this in the earlier section (called Tables) by rounding and checking for tolerance values. This is just the code I used to play around with finding if a value was within the tolerance limit or not. Can ignore this section!!
 ```{r}
 dfEstimatesFinalH%>%
   filter(variable == "N")%>% # only focus on N? or also use p??
