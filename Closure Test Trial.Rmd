@@ -116,6 +116,21 @@ dfEstimatesFinalH$width = dfEstimatesFinalH$ucl - dfEstimatesFinalH$lcl
 ```
 
 
+Create a dataframe of summarized variables. This is before outliers have been removed.
+```{r}
+dfSummarisedFinalH = dfEstimatesFinalH %>%
+  filter(variable == "N")%>% # only focus on N? or also use p??
+  group_by(p_1m,alpha,N,maxMinute,strFormula,combinationNumber)%>%
+  summarise(AvgNhat = mean(estimate,na.rm=TRUE),
+            AvgNhatSE= mean(se,na.rm=TRUE),
+            sdNhat = sd(estimate,na.rm=TRUE),
+            mse = mean(squaredError,na.rm=TRUE),
+            bias_SE_Nhat = AvgNhatSE - sdNhat,
+            coverage = sum(bCoverage,na.rm=TRUE)/sum(!is.na(estimate)), # changed this from n() to sum(!is.na()) because I have some NA values for my estimates
+            avgWidth = mean(width,na.rm=TRUE),
+            avgAIC = mean(AIC,na.rm=TRUE))
+```
+
 ## Find Single Detections
 
 
@@ -154,6 +169,85 @@ dfSingleDetection = dfHistoryFinalH %>%
 ```
 
 
+## Clean Data
 
+Add some important data to the dfHistory dataframe for further analysis
+```{r}
+dfHistoryFinalH = left_join(dfHistoryFinalH,dfSummarisedFinalH[,1:6], by= "combinationNumber")
+```
+
+```{r}
+# filter out cases that did not run
+dfEstimatesFinalH = dfEstimatesFinalHUnClean %>%
+  filter(variable == "N") %>%
+  filter(estimate>=0) %>%
+  filter(!(id %in% dfSingleDetection$id))
+
+dfEstimatesProbability = dfEstimatesFinalHUnClean %>% # these are probability estimates; not really needed for this project
+  filter(variable == "p g1 t1") %>%
+  filter(estimate>=0) %>%
+  filter(!(id %in% dfSingleDetection$id))
+```
+
+
+```{r}
+#add p,alpha,N, etc to help with graphing
+dfSummarisedFinalH = dfSummarisedFinalH[!(duplicated(dfSummarisedFinalH$combinationNumber)),]
+dfEstimatesFinalH = left_join(dfEstimatesFinalH, dfSummarisedFinalH[,1:6], by= "combinationNumber")
+dfEstimatesProbability  =  left_join(dfEstimatesProbability, dfSummarisedFinalH[,1:6], by= "combinationNumber")
+```
+
+
+# Otis Closure Test Alpha = 0
+
+Test cases to verify this is working correctly
+
+
+```{r}
+# function to detect time of last occurence
+detectMin = function(row){
+   if(row[11]=="=1"){ # row[11] is the bCounts column
+    wi = 0
+  } else {
+    revRow= rev(row) # reverse the row (last to first)
+    nColumns= length(row)
+    wi = nColumns - match(TRUE, revRow==1)+1 # find the new "first" match (even though it is the last match)
+  }
+  return(wi)
+}
+```
+
+
+```{r}
+testGreaterOne = which(dfHistoryFinalH$bCounts==">1" & dfHistoryFinalH$combinationNumber==80)
+# test cases
+dfHistoryFinalH[testGreaterOne[1:5],c(colnamesUse,"bCounts","counts")]
+apply(dfHistoryFinalH[testGreaterOne[1:5],c(colnamesUse,"bCounts","counts")]==1,1,function(x) match(TRUE,x))
+apply(dfHistoryFinalH[testGreaterOne[1:5],c(colnamesUse,"bCounts","counts")],1,detectMin)
+
+```
+
+I think we should only focus on animals which have been detected > 1 times anyways - that's what the scope of the test is for. But then if that is the case... isn't the point of doing the test to detect movement a little invalid? We have a large number of individuals being miscounted, so the capture history matrix is sparse and we won't have as many individuals to apply this too. The test seems a little ineffective, especially for short time intervals. 
+```{r}
+otisDetectClosure = function(df = dfHistoryFinalH){
+  
+  vi =  apply(df[,c(colnamesUse,"bCounts","counts")]==1,1,function(x) match(TRUE,x)) # occasion of first capture 
+  
+  # wi is the occasion of last capture - set to 0 for now **ASK**
+  wi = apply(df[,c(colnamesUse,"bCounts","counts")],1,detectMin)
+  
+  qi = vi = wi # waiting time between first and last capture 
+}
+```
+
+
+
+
+
+
+
+```{r}
+head(dfHistoryFinalH)
+```
 
 

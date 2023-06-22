@@ -313,6 +313,18 @@ calculateStatistics = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), l
 }
 
 
+# helper function to detect time of last occurrence of an observation
+detectMin = function(row){
+  if(row[11]=="=1"){ # row[11] is the bCounts column
+    wi = 0 # ASK
+  } else {
+    revRow= rev(row) # reverse the row (last to first)
+    nColumns= length(row)
+    wi = nColumns - match(TRUE, revRow==1)+1 # find the new "first" match (even though it is the last match)
+  }
+  return(wi)
+}
+
 # function to implement otis closure test
 
 otisDetectClosure = function(){
