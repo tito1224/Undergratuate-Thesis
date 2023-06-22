@@ -1,0 +1,159 @@
+---
+title: "Closure Test Trial"
+author: "Tito"
+date: "2023-06-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load Capture History
+```{r}
+library(tidyverse)
+library(gtools)
+library(data.table)
+library(matrixStats)
+library(RMark)
+library(stringi)
+library(rlang)
+library(gt)
+library(gtExtras)
+library(webshot2)
+library(knitr)
+library(readxl)
+```
+
+
+Load functions from the other R scripts.
+```{r}
+source("./Functions/generatePointCount.R")
+source("./Functions/runSimulationFunctions.R")
+```
+
+
+Load data - don't touch this. Temporarily set the working directory to load the data - will automatically return to current working directory after this chunk runs. The data in this folder is for 100 unique scenarios, with 1000 replicates. The scenarios are shown later on in the code and is called the "params" dataframe. The scenarios used to generate this data can also be found in the "./Functions/runSimulation.R" file. 
+```{r}
+setwd("./DigitalAllianceOutput/Huggins")
+dataFinalTrial = list.files(pattern = ".rds") # load rds files
+dataFinalTrial = mixedsort(dataFinalTrial)%>% # use mixedsort so it appears in ascending order 
+  map(readRDS)
+
+# initialize empty dataframes to store the data
+dfSummarisedFinalH= data.frame()
+dfEstimatesFinalH = data.frame()
+dfHistoryFinalH = data.frame()
+#counter = 1
+
+# loop through the rds files and retrive data 
+for (item in dataFinalTrial[c(1,80)]){
+  tempSummarisedResults = item[[1]] # retrieve the summary stats; this df is useless because extreme values have not been removed; ignore
+  tempCalculations = item[[2]] # load estimates for each run (should be 200,000 rows - 100,000 estimates of N, and 100,000 estimates of p)
+  tempHistory= item[[3]] # load the detection histories used to generate the histories 
+
+  
+  # add data points to final dataframe
+  dfSummarisedFinalH = rbind(dfSummarisedFinalH,tempSummarisedResults)
+  dfEstimatesFinalH = rbind(dfEstimatesFinalH, tempCalculations)
+  dfHistoryFinalH = rbind(dfHistoryFinalH, tempHistory)
+  #counter = counter + 1
+}
+```
+
+
+Some code to add identifiers to the data. Combination number will identify the variables used to create the scenario - or just "scenario". Simulation number will identify the run number - or datapoints actually generated. There are 1000 simulation numbers for every combination number! The variable `params` is created in one of the code chunks below, and shows the variables associated with each combination number.
+
+```{r}
+# id is combinationNumber_simulationNumber
+dfEstimatesFinalH$rowid = 1:nrow(dfEstimatesFinalH)
+dfEstimatesFinalH$id = paste0(dfEstimatesFinalH$combinationNumber,"_",dfEstimatesFinalH$simulationNumber)
+dfHistoryFinalH$id = paste0(dfHistoryFinalH$combinationNumber,"_",dfHistoryFinalH$simulationNumber)
+dfEstimatesFinalHUnClean = copy(dfEstimatesFinalH)
+```
+
+Find outliers
+```{r}
+dfOutliers = dfEstimatesFinalHUnClean %>%
+  filter(variable == "N") %>%
+  filter(estimate < 0 | is.na(estimate))
+nOutliers = nrow(dfOutliers)
+nEstimates = nrow(dfEstimatesFinalHUnClean[which(dfEstimatesFinalHUnClean$variable=="N"),])
+print(nOutliers)
+print(nEstimates)
+print(nOutliers/nEstimates)
+dfOutliers
+```
+
+
+The params dataset represents the scenarios/environment used to simulate data for each combination number. Add it to the dataset of final estimates to help calculate summary statistics.
+```{r}
+# this code is what was used in the ./Functions/runSimulation.R file to generate scenarios to input into the HPC 
+nRuns = 1000
+lstNi = c(10,20)
+lstP = c(0.1,0.2,0.3,0.4,0.5)
+#lstAlpha = c(0)
+lstAlpha =c(0,0.05,0.1,0.2,0.3)
+lstMaxMin = c(5,10)
+lstFormula = c("~1")
+lstMixtures = c(1)
+lstSeed = c("NULL")
+strModel = "Huggins"
+
+params = expand.grid(nRuns,lstNi,lstP, lstAlpha, lstMaxMin,lstFormula,lstMixtures,lstSeed,strModel)
+colnames(params) = c("nRuns","N","p_1m","alpha","maxMinute","strFormula","lstMixtures","lstSeed","strModel")
+params$Scenario = 1:nrow(params)
+
+# merge the params dataframe with the dataframe of estimates to help with calculating summary statistics 
+dfEstimatesFinalH = left_join(dfEstimatesFinalH,params,by=c("combinationNumber"="Scenario")) 
+
+# some code to help with calculating summary statistics -> full summary not done yet, but these are intermediate steps needed 
+# to determine things like coverage probability, MSE, etc
+dfEstimatesFinalH$bCoverage = ifelse(dfEstimatesFinalH$trueValue >= dfEstimatesFinalH$lcl & dfEstimatesFinalH$trueValue <= dfEstimatesFinalH$ucl,1,0)
+dfEstimatesFinalH$squaredError = (dfEstimatesFinalH$estimate - dfEstimatesFinalH$trueValues)^2
+dfEstimatesFinalH$width = dfEstimatesFinalH$ucl - dfEstimatesFinalH$lcl
+  
+```
+
+
+## Find Single Detections
+
+
+```{r}
+colnamesUse= paste0("Minute",1:10) # should say 1:10
+dfHistoryFinalH$counts = rowSums(dfHistoryFinalH[,colnamesUse],na.rm=TRUE)
+dfHistoryFinalH$bCounts = ifelse(dfHistoryFinalH$counts > 1,">1","=1")
+
+# find out for each id (scenario_simulationNumber) how many individuals were counted only once and how many were recaptured
+nMultDetect = dfHistoryFinalH %>%
+  filter(counts>1)
+nMultDetect = length(unique(nMultDetect$id))
+nMultDetect
+nMultDetect/nEstimates
+```
+
+Doing this just to make sure I'm filtering data right. Should add to 100.
+```{r}
+nMultDetect = dfHistoryFinalH %>%
+  filter(counts>1)
+
+nSingleDetection = dfHistoryFinalH %>%
+  filter(counts==1 & !(id %in% nMultDetect$id))
+
+nSingleDetection = length(unique(nSingleDetection$id))
+nSingleDetection
+nSingleDetection/nEstimates
+```
+Store for usage later on
+```{r}
+dfMultDetect = dfHistoryFinalH %>%
+  filter(counts>1)
+
+dfSingleDetection = dfHistoryFinalH %>%
+  filter(counts==1 & !(id %in% dfMultDetect$id))
+```
+
+
+
+
+

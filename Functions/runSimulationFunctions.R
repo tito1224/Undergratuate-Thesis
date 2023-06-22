@@ -311,3 +311,10 @@ calculateStatistics = function(nRuns = 1, lstNi = c(10,20), lstP = c(0.1,0.5), l
   dfSummaryStats = dfSummaryStats[!duplicated(dfSummaryStats),]
   return(list(dfSummaryStats, simDataTrue, dfHist))
 }
+
+
+# function to implement otis closure test
+
+otisDetectClosure = function(){
+  
+}
