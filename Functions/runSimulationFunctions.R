@@ -327,7 +327,8 @@ detectMin = function(row, bFirst = T){
   if (bFirst == TRUE){
     val = match(TRUE, str_ch == "1")
   } else { # grab last occurence of capture history 
-    if(row[1]=="=1"){ # row[1] is the bCounts column
+    noBcounts = which(names(row)=="bCounts")
+    if(row[noBcounts]=="=1"){ # row[1] is the bCounts column
       val = 0
     } else {
       revRow= rev(str_ch) # reverse the row (last to first)
