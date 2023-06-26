@@ -252,15 +252,13 @@ otisDetectClosure = function(df = dfCopy[,c("bCounts","counts","ch","combination
   
   
   # store distinct number of individuals captured for the combination number or simulation (simulation by id is optional)
-  #nDistinctIndividuals = nrow(df)
-  
-  
+  #nDistinctIndividuals = nrow(df) # too much work to add this
   
   # filter so that counts > 1 - or else the test doesn't really apply
   df = df%>%
     filter(counts>1)
-  
-  # handle case where *everyone* is captured only once 
+
+  # handle case where *everyone* is captured only once
   # use original dataset, but make sure wi/vi/qi are all a weird number
   if(nrow(df)==0){
       df = dfBackup
@@ -269,14 +267,14 @@ otisDetectClosure = function(df = dfCopy[,c("bCounts","counts","ch","combination
       qi = 100
   } else {
       vi = apply(df,1,detectMin, bFirst=TRUE) # occasion of first capture
-      wi = apply(df,1,detectMin, bFirst = FALSE) # wi is the occasion of last capture 
+      wi = apply(df,1,detectMin, bFirst = FALSE) # wi is the occasion of last capture
     }
-  
+
   df$vi = as.numeric(vi)
   df$wi = as.numeric(wi)
-  df$qi= df$wi - df$vi # waiting time between first and last capture 
+  df$qi= df$wi - df$vi # waiting time between first and last capture
   
-  # get unique number of capture scenarios
+  # get unique number of capture scenarios (not including single captures)
   lstK = unique(df$counts)
   lstCombinationNumber = unique(df$combinationNumber)
   
@@ -287,12 +285,13 @@ otisDetectClosure = function(df = dfCopy[,c("bCounts","counts","ch","combination
   nDfComponent = nrow(dfComponents) # get the number of combos for later use 
   
   for(nCombo in lstCombinationNumber){ # should I filter by combination number or simulation number??
+    
     for (k in lstK){
       
       # subset data
       if(!is.null(nID)){
         dfK = df %>%
-          filter(id %in% nID & counts == k)
+          filter(id %in% nID & combinationNumber == nCombo & counts == k)
       } else {
        dfK = df%>%
         filter(combinationNumber == nCombo & counts == k) 
@@ -304,7 +303,7 @@ otisDetectClosure = function(df = dfCopy[,c("bCounts","counts","ch","combination
       # get conditional expectation
       EQi = ((k-1)*(timeInterval+1))/(k+1)
       
-      print(dfK)
+      #print(dfK)
       
       # if no individuals exist that have been counted k times, the test statistic can't be calculated
       # for that scenario
@@ -320,7 +319,7 @@ otisDetectClosure = function(df = dfCopy[,c("bCounts","counts","ch","combination
       }
       
       # add components to dataframe
-      dfComponents[dfComponents$combinationNumber == nCombo & dfComponents$k == k,"distinctIndividuals"] = nDistinctIndividuals
+      #dfComponents[dfComponents$combinationNumber == nCombo & dfComponents$k == k,"distinctIndividuals"] = nDistinctIndividuals
       dfComponents[dfComponents$combinationNumber == nCombo & dfComponents$k == k,"fk"] = fk
       dfComponents[dfComponents$combinationNumber == nCombo & dfComponents$k == k,"EQi"] = EQi
       dfComponents[dfComponents$combinationNumber == nCombo & dfComponents$k == k,"VarQi"] = VarQi
@@ -332,26 +331,30 @@ otisDetectClosure = function(df = dfCopy[,c("bCounts","counts","ch","combination
       
     }
     
-    # find the overall test statistic for a given combination number 
-    dfComponents[dfComponents$combinationNumber == nCombo ,"C"] = sum(dfComponents$EQ - dfComponents$Eqi)/sqrt(sum(dfComponents$VarQi))
-    print(dfComponents)
   }
   
+  # clean dfComponents so that only combinations with actual values are present
+  dfComponents = dfComponents[dfComponents$fk !=0,]
   
-  
+  # add the overall test statistic C 
+  dfComponents = dfComponents%>%
+    group_by(combinationNumber)%>%
+    mutate(C= sum(EQ - EQi)/sqrt(sum(VarQi)))
   
 }
 ```
 
 
 ```{r}
-otisDetectClosure(dfCopy[,c("bCounts","counts","ch","combinationNumber","id")],c("80_1","1_30"))
+test = otisDetectClosure(dfCopy[,c("bCounts","counts","ch","combinationNumber","id")],c("80_1","1_30"))
+test
 ```
 
 
+
+
 ```{r}
-dfCopy%>%
-  filter(id == "1_80")
+test[!duplicated(test[,c("combinationNumber","C")]),c("combinationNumber","C")]
 ```
 
 ```{r}
