@@ -315,18 +315,192 @@ ggplot()+
 ```
 
 
+The graphs above are of average waiting time across scenarios - I can just make do the individual waiting times instead. Might get more information this way. 
+
+```{r}
+dfHistoryFinalH$vi = apply(dfHistoryFinalH,1,detectMin, bFirst=TRUE) # occasion of first capture
+dfHistoryFinalH$wi = apply(dfHistoryFinalH,1,detectMin, bFirst = FALSE) # wi is the occasion of last capture
+dfHistoryFinalH$qi= dfHistoryFinalH$wi - dfHistoryFinalH$vi # waiting time between first and last capture
+```
+
+
+
+Not that informative when maxMin = 5. But overall same pattern
+```{r}
+# if qi <0 it means there was only one detection
+dfHistoryFinalH%>%
+  filter(N == 10 & maxMinute == 5 & qi>0)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = qi, color = as.factor(alpha)))+ 
+  #facet_wrap(~maxMinute)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+
+dfHistoryFinalH%>%
+  filter(N == 10 & maxMinute == 10 & qi>0)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = qi, color = as.factor(alpha)))+ 
+  #facet_wrap(~maxMinute)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+```
+
+```{r}
+# if qi <0 it means there was only one detection
+dfHistoryFinalH%>%
+  filter(N == 20 & maxMinute == 5 & qi>0)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = qi, color = as.factor(alpha)))+ 
+  #facet_wrap(~maxMinute)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+
+dfHistoryFinalH%>%
+  filter(N == 20 & maxMinute == 10 & qi>0)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = qi, color = as.factor(alpha)))+ 
+  #facet_wrap(~maxMinute)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+```
+
+
+
 ## Conditional Test Statistic (C_k)
 
+Now I will look at the distribution of the p values associated with the test statistic C_k across various scenarios. 
 
 
+When Alpha = 0, for both maxMin = 5,10 the test indicates no movement consistently. When the detection probability is 0.1 and N = 10, it takes until alpha = 0.2 for the p value to drop and even then we can't confidently say closure is consistently rejected. However once the capture probability hits 0.2, when even a small amount of miscounting happens (ie alpha = 0.05) then we see the test begin to consistently reject closure - this happens across all detection probabilities when N = 20. 
+```{r}
+dfOtisTest_k%>%
+  filter(N == 10 & maxMinute == 5)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = p_k, color = as.factor(alpha)))+ 
+  #facet_wrap(~maxMinute)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+
+dfOtisTest_k%>%
+  filter(N == 10 & maxMinute == 10)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = p_k, color = as.factor(alpha)))+ 
+  #facet_wrap(~maxMinute)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+```
+```{r}
+dfOtisTest_k%>%
+  filter(N == 20 & maxMinute == 5)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = p_k, color = as.factor(alpha)))+ 
+  #facet_wrap(~maxMinute)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+
+dfOtisTest_k%>%
+  filter(N == 20 & maxMinute == 10)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = p_k, color = as.factor(alpha)))+ 
+  #facet_wrap(~maxMinute)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+```
+
+It's a little hard to see the p values when I include alpha = 0, so I will remove it for more granular analysis.
+Looks fine except for the case of N = 20, alpha = 0.3. Seems like the median p value gives the conclusion that closure is not violated... concerning because it clearly should be?
+```{r}
+dfOtisTest_k%>%
+  filter(N == 20 & maxMinute == 5 & alpha !=0)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = p_k, color = as.factor(alpha)))+ 
+  geom_hline(aes(yintercept=0.05), color= "red")+
+  #facet_wrap(~maxMinute)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+
+dfOtisTest_k%>%
+  filter(N == 20 & maxMinute == 10 & alpha !=0)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = p_k, color = as.factor(alpha)))+ 
+   geom_hline(aes(yintercept=0.05), color= "red")+
+  #facet_wrap(~maxMinute)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+```
+
+Investigate the N = 20, alpha = 0.3 case a bit more. 
+Median p-val is being dragged up because of the average p value
+```{r}
+dfOtisTest_k%>%
+  filter(N == 20 & alpha == 0.3 & maxMinute == 5 & p_1m == 0.1)
+```
+
+Investigate combo 42 w k = 4. Looking at capture histories of this case, not surprising to get a p value of 0.9 -> should I show a weighted avg of p values in the box plot instead? 
+```{r}
+dfHistoryFinalH%>%
+  filter(combinationNumber == 42 & counts == 4 )
+```
+
+Investigate other outliers from the data - the 0.85 dot in the graph.
+```{r}
+dfOtisTest_k%>%
+  filter(N == 20 & alpha == 0.05 & maxMinute == 10 & p_1m == 0.1)
+```
+
+Not an unreasonable conclusion to draw that closure is not violated from this specific case
+```{r}
+dfHistoryFinalH%>%
+  filter(combinationNumber == 62 & counts == 6 )
+```
+
+## Overall Test Statistic (C)
+
+The smaller the test statistic C is, the more evidence against closure. Looks like p=0.2 is high enough that we can reject closure consistently across alpha values.
+```{r}
+dfOtisTest_Overall%>%
+  filter(N == 20 & maxMinute == 5)%>%
+ggplot()+ 
+  geom_point(aes(x= p_1m, y = C, color = as.factor(alpha)))+ 
+  geom_line(aes(x= p_1m, y = C, color = as.factor(alpha)))+ 
+  geom_hline(yintercept = qnorm(0.05, lower.tail=TRUE),color = "grey20",size=0.8)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+
+dfOtisTest_Overall%>%
+  filter(N == 20 & maxMinute == 10)%>%
+ggplot()+ 
+  geom_point(aes(x= p_1m, y = C, color = as.factor(alpha)))+ 
+  geom_line(aes(x= p_1m, y = C, color = as.factor(alpha)))+ 
+  geom_hline(yintercept = qnorm(0.05, lower.tail=TRUE),color = "grey20",size=0.8)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+```
+
+One question I have is that why is the p value becoming lower for the case of alpha = 0 as detection probability increases. Shouldn't this be the opposite trend?
+
+```{r}
+dfOtisTest_Overall%>%
+  filter(N == 20 & maxMinute == 5)%>%
+ggplot()+ 
+  geom_point(aes(x= p_1m, y = pOverall, color = as.factor(alpha)))+ 
+  geom_line(aes(x= p_1m, y = pOverall, color = as.factor(alpha)))+ 
+  #facet_wrap(~maxMinute)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+
+dfOtisTest_Overall%>%
+  filter(N == 20 & maxMinute == 10)%>%
+ggplot()+ 
+  geom_point(aes(x= p_1m, y = pOverall, color = as.factor(alpha)))+ 
+  geom_line(aes(x= p_1m, y = pOverall, color = as.factor(alpha)))+ 
+  #facet_wrap(~maxMinute)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+```
 
 
-
-
-
-
-
-
+test whether C is a good overall indicator of rejecting? Ie compare rejection rate of C vs Ck and investigate scenarios where it occurs
 
 
 
