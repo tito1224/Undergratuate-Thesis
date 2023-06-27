@@ -210,14 +210,17 @@ dfHistoryFinalH%>%
   filter(counts>1)
 testCase = otisDetectClosure(dfHistoryFinalH, nID = c("1_30","80_1"))
 testCase
-testCase[!duplicated(testCase[,c("combinationNumber","C")]),c("combinationNumber","C")]
+testCase[!duplicated(testCase[,c("combinationNumber","C","pOverall")]),c("combinationNumber","C","pOverall")]
 ```
 
 
-Test a case where there are only single detections
+Test a case where there are only single detections - gives appropriate NA values!
 ```{r}
-
+dfHistoryFinalH%>%
+  filter(id== "1_80")
+otisDetectClosure(dfHistoryFinalH, nID = c("1_80"))
 ```
+
 
 
 

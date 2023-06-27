@@ -444,6 +444,12 @@ otisDetectClosure = function(df, nID = NULL){
     group_by(combinationNumber)%>%
     mutate(C= sum(EQ - EQi)/sqrt(sum(VarQi)))
   
+  # add p value for C_k
+  dfComponents$p_k = pnorm(dfComponents$Ck, lower.tail=TRUE)
+  
+  # add p value for C (overall test statistic)
+  dfComponents$pOverall = pnorm(dfComponents$C,lower.tail=TRUE)
+  
   return(dfComponents)
   
 }
