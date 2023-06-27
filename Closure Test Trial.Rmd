@@ -249,10 +249,73 @@ head(dfOtisTest_Overall)
 Let's graph some of these p values along with the p_1m and alpha to see if the test is effective
 
 
+## Average wait time (Qi)
+
+Graph of average wait time across the various scenarios
+
+
+It is not surprising that avg wait time between first and last capture is longer when maxMinute changes. We see that across all values of p_1m, as the probability of miscounting increases, time between first and last capture is smaller. This would make sense given that if animals are moving and being miscounted, the true capture history is truncated, and so time between first and last capture should be smaller. 
+```{r}
+dfOtisTest_k%>%
+  filter(N == 10 & maxMinute == 5)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = avgQi, color = as.factor(alpha)))+ 
+  #facet_wrap(~maxMinute)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+
+dfOtisTest_k%>%
+  filter(N == 10 & maxMinute == 10)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = avgQi, color = as.factor(alpha)))+ 
+  #facet_wrap(~maxMinute)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+```
+
+```{r}
+dfOtisTest_k%>%
+  filter(N == 20 & maxMinute == 5)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = avgQi, color = as.factor(alpha)))+ 
+  #facet_wrap(~maxMinute)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+
+dfOtisTest_k%>%
+  filter(N == 20 & maxMinute == 10)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = avgQi, color = as.factor(alpha)))+ 
+  #facet_wrap(~maxMinute)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+```
 
 
 
+For reference, this is the number of individuals in the data captured k times
+```{r}
+dfOtisTest_k%>%
+  filter(N == 20 & maxMinute == 10)%>%
+  ggplot()+
+  geom_bar(aes(x = k, y = fk, fill= as.factor(alpha)), position = "dodge", stat = "identity")+
+  facet_wrap(~p_1m)+
+  theme_bw()
+```
 
+Avg waiting time is lower for big alpha - also as expected
+```{r}
+dfOtisTest_k%>%
+  filter(N == 10 & maxMinute == 10)%>%
+ggplot()+ 
+  geom_point(aes(x= k, y = avgQi, color = as.factor(alpha)))+ 
+  facet_wrap(~p_1m)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+```
+
+
+## Conditional Test Statistic (C_k)
 
 
 
