@@ -209,8 +209,8 @@ dfHistoryFinalH%>%
   filter(id %in% c("1_30","80_1"))%>%
   filter(counts>1)
 testCase = otisDetectClosure(dfHistoryFinalH, nID = c("1_30","80_1"))
-testCase
-testCase[!duplicated(testCase[,c("combinationNumber","C","pOverall")]),c("combinationNumber","C","pOverall")]
+testCase[[1]]
+testCase[[2]]
 ```
 
 
@@ -222,7 +222,9 @@ otisDetectClosure(dfHistoryFinalH, nID = c("1_80"))
 ```
 
 
+# Otis Test on All Data
 
+Now that test cases have worked, I will apply the Otis closure test to all the simulated data. The 
 
 
 

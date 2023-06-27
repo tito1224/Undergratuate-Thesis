@@ -450,6 +450,9 @@ otisDetectClosure = function(df, nID = NULL){
   # add p value for C (overall test statistic)
   dfComponents$pOverall = pnorm(dfComponents$C,lower.tail=TRUE)
   
-  return(dfComponents)
+  # make a second data frame to show overall C value and p value
+  dfOverall = dfComponents[!duplicated(dfComponents[,c("combinationNumber","C","pOverall")]),c("combinationNumber","C","pOverall")]
+  
+  return(list(dfComponents, dfOverall))
   
 }
