@@ -224,7 +224,49 @@ otisDetectClosure(dfHistoryFinalH, nID = c("1_80"))
 
 # Otis Test on All Data
 
-Now that test cases have worked, I will apply the Otis closure test to all the simulated data. The 
+Now that test cases have worked, I will apply the Otis closure test to all the simulated data. 
+
+```{r}
+dfOtisTest = otisDetectClosure(dfHistoryFinalH)
+dfOtisTest_k = dfOtisTest[[1]]
+dfOtisTest_Overall = dfOtisTest[[2]]
+```
+
+Add the simulation parameters to the dataframe of p values. 
+```{r}
+dfOtisTest_k = left_join(dfOtisTest_k, params, by = c("combinationNumber"="Scenario"))
+dfOtisTest_Overall = left_join(dfOtisTest_Overall, params, by = c("combinationNumber"="Scenario"))
+```
+
+Inspect
+```{r}
+head(dfOtisTest_k)
+head(dfOtisTest_Overall)
+```
+
+## Graphs
+
+Let's graph some of these p values along with the p_1m and alpha to see if the test is effective
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
