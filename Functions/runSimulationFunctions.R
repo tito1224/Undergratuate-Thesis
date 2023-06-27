@@ -357,34 +357,60 @@ otisDetectClosure = function(df, nID = NULL){
   #nDistinctIndividuals = nrow(df) # too much work to add this
   
   # filter so that counts > 1 - or else the test doesn't really apply
+  orgCombinationNumber = unique(df$combinationNumber) # store this for the case where there are no detections
   df = df%>%
     filter(counts>1)
   
   # handle case where *everyone* is captured only once so there is no data - highly unlikely, but here just in case
   # use original dataset to handle this, but make sure wi/vi/qi are all a weird number
-  if(nrow(df)==0){
-    df = dfBackup
-    vi = NA
-    wi = NA
-    qi = NA
-  } else {
+  if(nrow(df)!=0){
     vi = apply(df,1,detectMin, bFirst=TRUE) # occasion of first capture
     wi = apply(df,1,detectMin, bFirst = FALSE) # wi is the occasion of last capture
+    df$vi = as.numeric(vi)
+    df$wi = as.numeric(wi)
+    df$qi= df$wi - df$vi # waiting time between first and last capture
+    
+    # get unique number of capture scenarios (not including single captures)
+    lstK = unique(df$counts)
+    lstCombinationNumber = unique(df$combinationNumber)
+    
+    # dataframe to store components of the test statistic
+    dfComponents = expand.grid(lstCombinationNumber, lstK) # get all possible combinations (not all will have data)
+    colnames(dfComponents)= c("combinationNumber","k")
+    nDfComponent = nrow(dfComponents) # get the number of combos for later use 
   }
   
-  df$vi = as.numeric(vi)
-  df$wi = as.numeric(wi)
-  df$qi= df$wi - df$vi # waiting time between first and last capture
   
-  # get unique number of capture scenarios (not including single captures)
-  lstK = unique(df$counts)
-  lstCombinationNumber = unique(df$combinationNumber)
+  # handle case where *everyone* is captured only once so there is no data - highly unlikely, but here just in case
+  # case when there are no detections (speed up process)
+  # make sure wi/vi/qi are all a weird number
+  if(nrow(df)==0){
+    # add components to dataframe
+    dfComponents = data.frame(combinationNumber = orgCombinationNumber)
+    dfComponents[,"k"] = NA
+    dfComponents[,"timeInterval"] = NA
+    dfComponents[,"fk"] = NA
+    dfComponents[,"EQi"] = NA
+    dfComponents[,"VarQi"] = NA
+    dfComponents[,"EQ"] = NA
+    dfComponents[,"Ck"] = NA
+    dfComponents[,"avgVi"] = NA
+    dfComponents[,"avgWi"] = NA
+    dfComponents[,"avgQi"] = NA
+    dfComponents[,"C"] = NA
+    
+    # add p value for C_k
+    dfComponents$p_k = NA
+    
+    # add p value for C (overall test statistic)
+    dfComponents$pOverall = NA
+    
+    # make a second data frame to show overall C value and p value
+    dfOverall = dfComponents[,c("combinationNumber","C","pOverall")]
+    return(list(dfComponents, dfOverall))
+    
+  }
   
-  # dataframe to store components of the test statistic
-  dfComponents =  data.frame() # store estimates
-  dfComponents = expand.grid(lstCombinationNumber, lstK) # get all possible combinations (not all will have data)
-  colnames(dfComponents)= c("combinationNumber","k")
-  nDfComponent = nrow(dfComponents) # get the number of combos for later use 
   
   for(nCombo in lstCombinationNumber){ # should I filter by combination number or simulation number??
     

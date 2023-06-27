@@ -47,7 +47,7 @@ dfHistoryFinalH = data.frame()
 #counter = 1
 
 # loop through the rds files and retrive data 
-for (item in dataFinalTrial[c(1,80)]){
+for (item in dataFinalTrial){
   tempSummarisedResults = item[[1]] # retrieve the summary stats; this df is useless because extreme values have not been removed; ignore
   tempCalculations = item[[2]] # load estimates for each run (should be 200,000 rows - 100,000 estimates of N, and 100,000 estimates of p)
   tempHistory= item[[3]] # load the detection histories used to generate the histories 
