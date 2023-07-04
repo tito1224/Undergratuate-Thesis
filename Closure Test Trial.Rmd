@@ -9,6 +9,20 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+# Questions
+
+- Review code for otisClosure test
+  - Is it right to group statistics by combination number?
+- The Otis test only applies to those who have been counted > 1 time because it depends on waiting time between first and last capture
+  - Is this not a little ineffective though because we ignore all the data from individuals captured only once? 
+- Include qualitative indicators?
+- Otis closure test seems to work --> however, how do we know its not rejecting because the underlying model is not correct? When alpha = 0 seems to always not reject... but just want to make sure this is ok? underlying model for H0 is that the data is  
+- test for temporary emigration? Is it effective with movement?
+- likelihood ratio test of constrained models? - couldn't find any papers doing this sort of test for the CJS model (comparing cjs to M_T with GOF). It was all a sequence of chi square tests.
+- general GOF in Rmark is done using the quasi likelihood?
+  - Should I try the tests presented in the second paper? 
+
+
 # Load Capture History
 ```{r}
 library(tidyverse)
@@ -204,17 +218,23 @@ I think we should only focus on animals which have been detected > 1 times anywa
 
 
 Test several ids's
+
 ```{r}
-dfHistoryFinalH%>%
+testdf = dfHistoryFinalH%>%
   filter(id %in% c("1_30","80_1"))%>%
   filter(counts>1)
-testCase = otisDetectClosure(dfHistoryFinalH, nID = c("1_30","80_1"))
-testCase[[1]]
-testCase[[2]]
 ```
 
 
-Test a case where there are only single detections - gives appropriate NA values!
+```{r}
+dfHistoryFinalH%>%
+  filter(id %in% c("5_10"))
+testCase = otisDetectClosure(dfHistoryFinalH, nID = c("5_10"))
+testCase
+```
+
+
+Test a case where there are only single detections 
 ```{r}
 dfHistoryFinalH%>%
   filter(id== "1_80")
@@ -228,21 +248,15 @@ Now that test cases have worked, I will apply the Otis closure test to all the s
 
 ```{r}
 dfOtisTest = otisDetectClosure(dfHistoryFinalH)
-dfOtisTest_k = dfOtisTest[[1]]
-dfOtisTest_Overall = dfOtisTest[[2]]
+head(dfOtisTest)
 ```
 
-Add the simulation parameters to the dataframe of p values. 
+test calculations
 ```{r}
-dfOtisTest_k = left_join(dfOtisTest_k, params, by = c("combinationNumber"="Scenario"))
-dfOtisTest_Overall = left_join(dfOtisTest_Overall, params, by = c("combinationNumber"="Scenario"))
+dfOtisTest%>%
+  filter(id == "5_10")
 ```
 
-Inspect
-```{r}
-head(dfOtisTest_k)
-head(dfOtisTest_Overall)
-```
 
 ## Graphs
 
@@ -256,7 +270,7 @@ Graph of average wait time across the various scenarios
 
 It is not surprising that avg wait time between first and last capture is longer when maxMinute changes. We see that across all values of p_1m, as the probability of miscounting increases, time between first and last capture is smaller. This would make sense given that if animals are moving and being miscounted, the true capture history is truncated, and so time between first and last capture should be smaller. 
 ```{r}
-dfOtisTest_k%>%
+dfOtisTest%>%
   filter(N == 10 & maxMinute == 5)%>%
 ggplot()+ 
   geom_boxplot(aes(x= as.factor(p_1m), y = avgQi, color = as.factor(alpha)))+ 
@@ -264,7 +278,7 @@ ggplot()+
   scale_color_discrete(name="Alpha")+
   theme_bw()
 
-dfOtisTest_k%>%
+dfOtisTest%>%
   filter(N == 10 & maxMinute == 10)%>%
 ggplot()+ 
   geom_boxplot(aes(x= as.factor(p_1m), y = avgQi, color = as.factor(alpha)))+ 
@@ -273,8 +287,10 @@ ggplot()+
   theme_bw()
 ```
 
+
+
 ```{r}
-dfOtisTest_k%>%
+dfOtisTest%>%
   filter(N == 20 & maxMinute == 5)%>%
 ggplot()+ 
   geom_boxplot(aes(x= as.factor(p_1m), y = avgQi, color = as.factor(alpha)))+ 
@@ -282,7 +298,7 @@ ggplot()+
   scale_color_discrete(name="Alpha")+
   theme_bw()
 
-dfOtisTest_k%>%
+dfOtisTest%>%
   filter(N == 20 & maxMinute == 10)%>%
 ggplot()+ 
   geom_boxplot(aes(x= as.factor(p_1m), y = avgQi, color = as.factor(alpha)))+ 
@@ -293,51 +309,19 @@ ggplot()+
 
 
 
-For reference, this is the number of individuals in the data captured k times
-```{r}
-dfOtisTest_k%>%
-  filter(N == 20 & maxMinute == 10)%>%
-  ggplot()+
-  geom_bar(aes(x = k, y = fk, fill= as.factor(alpha)), position = "dodge", stat = "identity")+
-  facet_wrap(~p_1m)+
-  theme_bw()
-```
-
-Avg waiting time is lower for big alpha - also as expected
-```{r}
-dfOtisTest_k%>%
-  filter(N == 10 & maxMinute == 10)%>%
-ggplot()+ 
-  geom_point(aes(x= k, y = avgQi, color = as.factor(alpha)))+ 
-  facet_wrap(~p_1m)+
-  scale_color_discrete(name="Alpha")+
-  theme_bw()
-```
-
-
-The graphs above are of average waiting time across scenarios - I can just make do the individual waiting times instead. Might get more information this way. 
-
-```{r}
-dfHistoryFinalH$vi = apply(dfHistoryFinalH,1,detectMin, bFirst=TRUE) # occasion of first capture
-dfHistoryFinalH$wi = apply(dfHistoryFinalH,1,detectMin, bFirst = FALSE) # wi is the occasion of last capture
-dfHistoryFinalH$qi= dfHistoryFinalH$wi - dfHistoryFinalH$vi # waiting time between first and last capture
-```
-
-
-
 Not that informative when maxMin = 5. But overall same pattern
 ```{r}
 # if qi <0 it means there was only one detection
-dfHistoryFinalH%>%
-  filter(N == 10 & maxMinute == 5 & qi>0)%>%
+dfOtisTest%>%
+  filter(N == 10 & maxMinute == 5)%>%
 ggplot()+ 
   geom_boxplot(aes(x= as.factor(p_1m), y = qi, color = as.factor(alpha)))+ 
   #facet_wrap(~maxMinute)+
   scale_color_discrete(name="Alpha")+
   theme_bw()
 
-dfHistoryFinalH%>%
-  filter(N == 10 & maxMinute == 10 & qi>0)%>%
+dfOtisTest%>%
+  filter(N == 10 & maxMinute == 10)%>%
 ggplot()+ 
   geom_boxplot(aes(x= as.factor(p_1m), y = qi, color = as.factor(alpha)))+ 
   #facet_wrap(~maxMinute)+
@@ -345,23 +329,52 @@ ggplot()+
   theme_bw()
 ```
 
+
 ```{r}
-# if qi <0 it means there was only one detection
-dfHistoryFinalH%>%
-  filter(N == 20 & maxMinute == 5 & qi>0)%>%
+dfOtisTest%>%
+  filter(N==20 & maxMinute== 10)%>%
+  ggplot()+
+  geom_bar(aes(x=qi, fill = as.factor(alpha)), position = "dodge")+
+  facet_wrap(~p_1m, scales="free")+
+  theme_bw()
+```
+
+
+```{r}
+dfOtisTest%>%
+  filter(N == 20 & maxMinute == 5 )%>%
 ggplot()+ 
   geom_boxplot(aes(x= as.factor(p_1m), y = qi, color = as.factor(alpha)))+ 
   #facet_wrap(~maxMinute)+
   scale_color_discrete(name="Alpha")+
   theme_bw()
 
-dfHistoryFinalH%>%
-  filter(N == 20 & maxMinute == 10 & qi>0)%>%
+dfOtisTest%>%
+  filter(N == 20 & maxMinute == 10)%>%
 ggplot()+ 
   geom_boxplot(aes(x= as.factor(p_1m), y = qi, color = as.factor(alpha)))+ 
   #facet_wrap(~maxMinute)+
   scale_color_discrete(name="Alpha")+
   theme_bw()
+```
+
+Average detections per scenario (look @ how sparse detections are) - just another graph to show that I simulated properly - # detetections in each scenario is appx equal to capture probability
+```{r}
+# dfSparse = dfOtisTest[!duplicated(dfOtisTest[,c("id","percentDetections")]),]
+# 
+# dfSparse%>%
+#   filter(N == 20 & maxMinute == 5)%>%
+# ggplot()+
+#   geom_boxplot(aes(x= as.factor(p_1m), y = percentDetections, color = as.factor(alpha)))+
+#   scale_color_discrete(name="Alpha")+
+#   theme_bw()
+# 
+# dfSparse%>%
+#   filter(N == 20 & maxMinute == 10)%>%
+# ggplot()+
+#   geom_boxplot(aes(x= as.factor(p_1m), y = percentDetections, color = as.factor(alpha)))+
+#   scale_color_discrete(name="Alpha")+
+#   theme_bw()
 ```
 
 
@@ -371,46 +384,51 @@ ggplot()+
 Now I will look at the distribution of the p values associated with the test statistic C_k across various scenarios. 
 
 
-When Alpha = 0, for both maxMin = 5,10 the test indicates no movement consistently. When the detection probability is 0.1 and N = 10, it takes until alpha = 0.2 for the p value to drop and even then we can't confidently say closure is consistently rejected. However once the capture probability hits 0.2, when even a small amount of miscounting happens (ie alpha = 0.05) then we see the test begin to consistently reject closure - this happens across all detection probabilities when N = 20. 
+When N = 10 and only five capture occasions, Otis test does not reject closure on average. Note that low population and low capture occasion means that we use only 1-2 individuals to calculate the conditional test statistic - this does not seem to be a good idea.  
 ```{r}
-dfOtisTest_k%>%
+dfOtisTest%>%
   filter(N == 10 & maxMinute == 5)%>%
 ggplot()+ 
   geom_boxplot(aes(x= as.factor(p_1m), y = p_k, color = as.factor(alpha)))+ 
-  #facet_wrap(~maxMinute)+
+  geom_hline(aes(yintercept=0.05), color = "grey30")+
   scale_color_discrete(name="Alpha")+
   theme_bw()
 
-dfOtisTest_k%>%
+dfOtisTest%>%
   filter(N == 10 & maxMinute == 10)%>%
 ggplot()+ 
   geom_boxplot(aes(x= as.factor(p_1m), y = p_k, color = as.factor(alpha)))+ 
-  #facet_wrap(~maxMinute)+
+   geom_hline(aes(yintercept=0.05), color = "grey30")+
   scale_color_discrete(name="Alpha")+
   theme_bw()
 ```
+
+
+Same phenomenon for when N= 20 -> 5 capture occasions is simply too small. Previous work has shown that when p is large, even a small alpha (0.05) will cause significantly biased estimates. However, the Otis test will not capture this and still fails to reject the closure assumption.  
 ```{r}
-dfOtisTest_k%>%
+dfOtisTest%>%
   filter(N == 20 & maxMinute == 5)%>%
 ggplot()+ 
   geom_boxplot(aes(x= as.factor(p_1m), y = p_k, color = as.factor(alpha)))+ 
-  #facet_wrap(~maxMinute)+
+  geom_hline(aes(yintercept=0.05), color= "red")+
   scale_color_discrete(name="Alpha")+
   theme_bw()
 
-dfOtisTest_k%>%
+dfOtisTest%>%
   filter(N == 20 & maxMinute == 10)%>%
 ggplot()+ 
   geom_boxplot(aes(x= as.factor(p_1m), y = p_k, color = as.factor(alpha)))+ 
-  #facet_wrap(~maxMinute)+
+  geom_hline(aes(yintercept=0.05), color= "red")+
   scale_color_discrete(name="Alpha")+
   theme_bw()
 ```
+
+
 
 It's a little hard to see the p values when I include alpha = 0, so I will remove it for more granular analysis.
 Looks fine except for the case of N = 20, alpha = 0.3. Seems like the median p value gives the conclusion that closure is not violated... concerning because it clearly should be?
 ```{r}
-dfOtisTest_k%>%
+dfOtisTest%>%
   filter(N == 20 & maxMinute == 5 & alpha !=0)%>%
 ggplot()+ 
   geom_boxplot(aes(x= as.factor(p_1m), y = p_k, color = as.factor(alpha)))+ 
@@ -419,7 +437,7 @@ ggplot()+
   scale_color_discrete(name="Alpha")+
   theme_bw()
 
-dfOtisTest_k%>%
+dfOtisTest%>%
   filter(N == 20 & maxMinute == 10 & alpha !=0)%>%
 ggplot()+ 
   geom_boxplot(aes(x= as.factor(p_1m), y = p_k, color = as.factor(alpha)))+ 
@@ -429,78 +447,96 @@ ggplot()+
   theme_bw()
 ```
 
-Investigate the N = 20, alpha = 0.3 case a bit more. 
-Median p-val is being dragged up because of the average p value
+I think its weird that the case of p_1m = 0.1 isn't producing lower p values - esp when alpha = 0.3. Esp given that N = 20 and maxMin = 10. Check the data for some of these
+
 ```{r}
-dfOtisTest_k%>%
-  filter(N == 20 & alpha == 0.3 & maxMinute == 5 & p_1m == 0.1)
+# alpha = 0.3 and p_1m = 0.1 and maxMin = 10 and N = 20 is scenario 92
+
+dfOtisTest%>%
+  filter(combinationNumber==92)%>%
+  arrange(desc(fk),desc(p_k))%>%
+  head(10)%>%
+  select(id, fk, counts, p_k, Ck)
 ```
 
-Investigate combo 42 w k = 4. Looking at capture histories of this case, not surprising to get a p value of 0.9 -> should I show a weighted avg of p values in the box plot instead? 
+has a super long wait time - makes sense that it wasn't rejected...
 ```{r}
-dfHistoryFinalH%>%
-  filter(combinationNumber == 42 & counts == 4 )
+dfOtisTest%>%
+  filter(id == "92_344")
 ```
 
-Investigate other outliers from the data - the 0.85 dot in the graph.
 ```{r}
-dfOtisTest_k%>%
-  filter(N == 20 & alpha == 0.05 & maxMinute == 10 & p_1m == 0.1)
+dfOtisTest%>%
+  filter(id == "92_990")
+
+dfOtisTest%>%
+  filter(id == "92_396")
 ```
 
-Not an unreasonable conclusion to draw that closure is not violated from this specific case
+makes sense to see less rejections of closure when time interval is larger - even despite the big alpha because the low detection probability means not that many people are detected anyways. Also this is all based on only 3/4 individuals which is not great and feels like it is subject to a lot of variability. 
+
+
+you can see that in cases where there are a lot of actual splits in the data, the p val is low (ie 92_897)
+
+when maxmin is five we rarely ever reject... probs because the Eqi is incredibly low.
+
 ```{r}
-dfHistoryFinalH%>%
-  filter(combinationNumber == 62 & counts == 6 )
+dfOtisTest%>%
+  filter(combinationNumber==42)%>%
+  arrange(desc(fk),desc(p_k) )%>%
+  head(30)%>%
+  select(id, fk, counts, p_k, Ck)
 ```
+makes sense why this is not rejected - also no splits happened here
+```{r}
+dfOtisTest%>%
+  filter(id == "42_96")
+```
+
 
 ## Overall Test Statistic (C)
 
 The smaller the test statistic C is, the more evidence against closure. Looks like p=0.2 is high enough that we can reject closure consistently across alpha values.
 ```{r}
-dfOtisTest_Overall%>%
+dfOtisTest%>%
   filter(N == 20 & maxMinute == 5)%>%
 ggplot()+ 
-  geom_point(aes(x= p_1m, y = C, color = as.factor(alpha)))+ 
-  geom_line(aes(x= p_1m, y = C, color = as.factor(alpha)))+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = C, color = as.factor(alpha)))+ 
   geom_hline(yintercept = qnorm(0.05, lower.tail=TRUE),color = "grey20",size=0.8)+
   scale_color_discrete(name="Alpha")+
   theme_bw()
 
-dfOtisTest_Overall%>%
+dfOtisTest%>%
   filter(N == 20 & maxMinute == 10)%>%
 ggplot()+ 
-  geom_point(aes(x= p_1m, y = C, color = as.factor(alpha)))+ 
-  geom_line(aes(x= p_1m, y = C, color = as.factor(alpha)))+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = C, color = as.factor(alpha)))+ 
   geom_hline(yintercept = qnorm(0.05, lower.tail=TRUE),color = "grey20",size=0.8)+
   scale_color_discrete(name="Alpha")+
   theme_bw()
 ```
 
-One question I have is that why is the p value becoming lower for the case of alpha = 0 as detection probability increases. Shouldn't this be the opposite trend?
 
+same phenomenon where we only reject when p_1m is around 0.5 - unlikely to be the case irl 
 ```{r}
-dfOtisTest_Overall%>%
+dfOtisTest%>%
   filter(N == 20 & maxMinute == 5)%>%
 ggplot()+ 
-  geom_point(aes(x= p_1m, y = pOverall, color = as.factor(alpha)))+ 
-  geom_line(aes(x= p_1m, y = pOverall, color = as.factor(alpha)))+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = pOverall, color = as.factor(alpha)))+ 
+  geom_hline(yintercept = 0.05,color = "grey20",size=0.8)+
   #facet_wrap(~maxMinute)+
   scale_color_discrete(name="Alpha")+
   theme_bw()
 
-dfOtisTest_Overall%>%
+dfOtisTest%>%
   filter(N == 20 & maxMinute == 10)%>%
 ggplot()+ 
-  geom_point(aes(x= p_1m, y = pOverall, color = as.factor(alpha)))+ 
-  geom_line(aes(x= p_1m, y = pOverall, color = as.factor(alpha)))+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = pOverall, color = as.factor(alpha)))+ 
+  geom_hline(yintercept = 0.05,color = "grey20",size=0.8)+
   #facet_wrap(~maxMinute)+
   scale_color_discrete(name="Alpha")+
   theme_bw()
 ```
 
-
-test whether C is a good overall indicator of rejecting? Ie compare rejection rate of C vs Ck and investigate scenarios where it occurs
 
 
 

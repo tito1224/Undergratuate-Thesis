@@ -324,6 +324,7 @@ detectMin = function(row, bFirst = T){
   str_ch = strsplit(row[noCH],"")$ch # make this more dynamic instead of hardcoding row[3]
   
   # grab first occurrence of capture history 
+  # which(ch>0) - clean up 
   if (bFirst == TRUE){
     val = match(TRUE, str_ch == "1")
   } else { # grab last occurence of capture history 
@@ -340,11 +341,10 @@ detectMin = function(row, bFirst = T){
   return(val)
 }
 
+
+
 # function to implement otis closure test
 otisDetectClosure = function(df, nID = NULL){
-  
-  # store original dataset in case
-  dfBackup = copy(df)
   
   # id is an optional argument to test specific simulations - used for checking validity of calculations
   if(!is.null(nID)){
@@ -352,133 +352,53 @@ otisDetectClosure = function(df, nID = NULL){
       filter(id %in% nID)
   }
   
-  
   # store distinct number of individuals captured for the combination number or simulation (simulation by id is optional)
-  #nDistinctIndividuals = nrow(df) # too much work to add this
+  df = df %>%
+    group_by(id)%>%
+    mutate(nDistinctIndividuals = n(), 
+           percentDetections = sum(counts)/(nDistinctIndividuals*maxMinute))%>%
+    ungroup()
   
   # filter so that counts > 1 - or else the test doesn't really apply
-  orgCombinationNumber = unique(df$combinationNumber) # store this for the case where there are no detections
   df = df%>%
     filter(counts>1)
   
   # handle case where *everyone* is captured only once so there is no data - highly unlikely, but here just in case
   # use original dataset to handle this, but make sure wi/vi/qi are all a weird number
   if(nrow(df)!=0){
-    vi = apply(df,1,detectMin, bFirst=TRUE) # occasion of first capture
-    wi = apply(df,1,detectMin, bFirst = FALSE) # wi is the occasion of last capture
-    df$vi = as.numeric(vi)
-    df$wi = as.numeric(wi)
+    df$vi = apply(df,1,detectMin, bFirst=TRUE) # occasion of first capture
+    df$wi = apply(df,1,detectMin, bFirst = FALSE) # wi is the occasion of last capture
     df$qi= df$wi - df$vi # waiting time between first and last capture
-    
-    # get unique number of capture scenarios (not including single captures)
-    lstK = unique(df$counts)
-    lstCombinationNumber = unique(df$combinationNumber)
-    
-    # dataframe to store components of the test statistic
-    dfComponents = expand.grid(lstCombinationNumber, lstK) # get all possible combinations (not all will have data)
-    colnames(dfComponents)= c("combinationNumber","k")
-    nDfComponent = nrow(dfComponents) # get the number of combos for later use 
+  } else {
+    df$vi = NA
+    df$wi = NA
+    df$qi = NA
   }
   
   
-  # handle case where *everyone* is captured only once so there is no data - highly unlikely, but here just in case
-  # case when there are no detections (speed up process)
-  # make sure wi/vi/qi are all a weird number
-  if(nrow(df)==0){
-    # add components to dataframe
-    dfComponents = data.frame(combinationNumber = orgCombinationNumber)
-    dfComponents[,"k"] = NA
-    dfComponents[,"timeInterval"] = NA
-    dfComponents[,"fk"] = NA
-    dfComponents[,"EQi"] = NA
-    dfComponents[,"VarQi"] = NA
-    dfComponents[,"EQ"] = NA
-    dfComponents[,"Ck"] = NA
-    dfComponents[,"avgVi"] = NA
-    dfComponents[,"avgWi"] = NA
-    dfComponents[,"avgQi"] = NA
-    dfComponents[,"C"] = NA
-    
-    # add p value for C_k
-    dfComponents$p_k = NA
-    
-    # add p value for C (overall test statistic)
-    dfComponents$pOverall = NA
-    
-    # make a second data frame to show overall C value and p value
-    dfOverall = dfComponents[,c("combinationNumber","C","pOverall")]
-    return(list(dfComponents, dfOverall))
-    
-  }
+  # make a dataframe of test statistic components and p values
+  dfStats = df %>%
+    group_by(id, counts)%>%
+    summarise(fk = n(),
+           EQi = ((counts-1)*(maxMinute+1))/(counts+1),
+           EQ = sum(qi)/fk,
+           Difference= EQ-EQi,
+           VarQi = (2*(maxMinute-counts)*(counts-1)*(maxMinute+1))/((counts+2)*((counts+1)^2)*fk ),
+           Ck = (EQ-EQi)/sqrt(VarQi),
+           p_k= pnorm(Ck, lower.tail=TRUE))%>%
+    filter(!duplicated(id))
   
+  dfStats = dfStats%>%
+    group_by(id)%>%
+    mutate(C = sum(EQ - EQi)/sqrt(sum(VarQi)),
+           pOverall = pnorm(C,lower.tail=TRUE))
+
+  # merge with original dataframe
+  df = left_join(df, dfStats, by = c("id","counts"))
+  df = df %>%
+    group_by(id)%>%
+    mutate(avgQi = mean(qi))
   
-  for(nCombo in lstCombinationNumber){ # should I filter by combination number or simulation number??
-    
-    for (k in lstK){
-      
-      # subset data
-      if(!is.null(nID)){
-        dfK = df %>%
-          filter(id %in% nID & combinationNumber == nCombo & counts == k)
-      } else {
-        dfK = df%>%
-          filter(combinationNumber == nCombo & counts == k) 
-      }
-      
-      # get time interval
-      timeInterval = nchar(dfK[1,"ch"])
-      fk = nrow(dfK) # number of individuals counted k times
-      # get conditional expectation
-      EQi = ((k-1)*(timeInterval+1))/(k+1)
-      
-      #print(dfK)
-      
-      # if no individuals exist that have been counted k times, the test statistic can't be calculated
-      # for that scenario
-      if(fk==0){
-        EQ = NA
-        VarQi = NA
-        Ck= NA
-      } else {
-        # calculate test statistic
-        EQ = sum(dfK$qi)/fk
-        VarQi = (2*(timeInterval-k)*(k-1)*(timeInterval+1))/((k+2)*((k+1)^2)*fk )
-        Ck = (EQ-EQi)/sqrt(VarQi) 
-      }
-      
-      # add components to dataframe
-      #dfComponents[dfComponents$combinationNumber == nCombo & dfComponents$k == k,"distinctIndividuals"] = nDistinctIndividuals
-      dfComponents[dfComponents$combinationNumber == nCombo & dfComponents$k == k,"timeInterval"] = timeInterval
-      dfComponents[dfComponents$combinationNumber == nCombo & dfComponents$k == k,"fk"] = fk
-      dfComponents[dfComponents$combinationNumber == nCombo & dfComponents$k == k,"EQi"] = EQi
-      dfComponents[dfComponents$combinationNumber == nCombo & dfComponents$k == k,"VarQi"] = VarQi
-      dfComponents[dfComponents$combinationNumber == nCombo & dfComponents$k == k,"EQ"] = EQ
-      dfComponents[dfComponents$combinationNumber == nCombo & dfComponents$k == k,"Ck"] = Ck
-      dfComponents[dfComponents$combinationNumber == nCombo & dfComponents$k == k,"avgVi"] = mean(dfK$vi)
-      dfComponents[dfComponents$combinationNumber == nCombo & dfComponents$k == k,"avgWi"] = mean(dfK$wi)
-      dfComponents[dfComponents$combinationNumber == nCombo & dfComponents$k == k,"avgQi"] = mean(dfK$qi)
-      
-    }
-    
-  }
-  
-  # clean dfComponents so that only combinations with actual values are present
-  dfComponents = dfComponents[dfComponents$fk !=0,]
-  
-  # add the overall test statistic C 
-  dfComponents = dfComponents%>%
-    group_by(combinationNumber)%>%
-    mutate(C= sum(EQ - EQi)/sqrt(sum(VarQi)))
-  
-  # add p value for C_k
-  dfComponents$p_k = pnorm(dfComponents$Ck, lower.tail=TRUE)
-  
-  # add p value for C (overall test statistic)
-  dfComponents$pOverall = pnorm(dfComponents$C,lower.tail=TRUE)
-  
-  # make a second data frame to show overall C value and p value
-  dfOverall = dfComponents[!duplicated(dfComponents[,c("combinationNumber","C","pOverall")]),c("combinationNumber","C","pOverall")]
-  
-  return(list(dfComponents, dfOverall))
+  return(df)
   
 }
