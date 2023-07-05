@@ -1,0 +1,86 @@
+---
+title: "Test CJS"
+author: "Tito"
+date: "2023-07-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+- Can we use AIC to compare models (book says AIC is used to compare unnested models)
+- ask about adjust.value parameter (or adjust parameter - refer to documentation)
+- 
+
+# Load Capture History
+```{r}
+library(tidyverse)
+library(gtools)
+library(data.table)
+library(matrixStats)
+library(RMark)
+library(stringi)
+library(rlang)
+library(gt)
+library(gtExtras)
+library(webshot2)
+library(knitr)
+library(readxl)
+```
+
+Load functions from the other R scripts.
+```{r}
+source("./Functions/generatePointCount.R")
+source("./Functions/runSimulationFunctions.R")
+```
+
+
+
+```{r}
+# remember that Ni can be a list!
+dfMarkInitial = generateDetects(20,0.4,10)
+dfMarkInitial = generateErrors(dfMarkInitial,0.2)
+dfMark = detectsToCapHist(dfMarkInitial)[,"ch"] # for now combine all detections regardless of locationID 
+
+strFormula = "~1"
+strFormula_phi = "~1"
+strModel = "CJS"
+pformula = list(formula = eval(parse_expr(strFormula)),share=TRUE)
+phiformula = list(formula = eval(parse_expr(strFormula_phi)),share=TRUE)
+scenarioSimNum=2
+model_no_restriction = mark(dfMark, model = strModel, model.parameters = list(Phi = phiformula, p=pformula),prefix=scenarioSimNum,delete=TRUE,output=FALSE)
+# should I use adjust parameter?
+```
+
+Acc not that far off? p_hat = 0.42 and real one is 0.4. Survival (phi) = 0.786 which means that prob of death/removal is 0.214 - this roughly equivalent to the true alpha value of 0.2.
+```{r}
+model_no_restriction$results$real
+```
+
+
+However for the CJS model we don't get estimates of N. So I'm going to try and use the POPAN model which is a parameterization of the JS model that is robust: https://sites.warnercnr.colostate.edu/gwhite/popan-model/
+
+https://sites.warnercnr.colostate.edu/gwhite/model-structure/
+
+```{r}
+# remember that Ni can be a list!
+dfMarkInitial = generateDetects(20,0.4,10)
+dfMarkInitial = generateErrors(dfMarkInitial,0.2)
+dfMark = detectsToCapHist(dfMarkInitial)[,"ch"] # for now combine all detections regardless of locationID 
+
+strFormula = "~1"
+strFormula_phi = "~1"
+strFormula_pent = "~1"
+strModel = "POPAN"
+pformula = list(formula = eval(parse_expr(strFormula)),share=TRUE)
+phiformula = list(formula = eval(parse_expr(strFormula_phi)),share=TRUE)
+pentformula= list(formula = eval(parse_expr(strFormula_pent)),share=TRUE)
+scenarioSimNum=2
+model_no_restriction = mark(dfMark, model = strModel, model.parameters = list(Phi = phiformula, p=pformula),prefix=scenarioSimNum,delete=TRUE,output=FALSE)
+```
+
+
+
+
+
