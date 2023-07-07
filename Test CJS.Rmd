@@ -241,12 +241,65 @@ QAIC = function(model,k,c){
 
 ```
 
-pick the full model anyways! which is the correct ans
+pick the nested model... not the answer I wanted
 ```{r}
 c_hat = lrt_stat/df_cjs
 qaic_full = QAIC(model_no_restriction, k = 2,c = c_hat)
-qaic_nested =  QAIC(model_restriction, k = 2,c = c_hat)
+qaic_nested =  QAIC(model_restriction, k = 1,c = c_hat)
 qaic_full
 qaic_nested
 ```
+
+mark manual however says that the x2/df method is not always the best because the approximation doesn't always hold. We need to use the chi square values from test 2 & test 3 along with the df to find the appropriate chat and then find QAIC using this. 
+
+# Release
+
+Implement test 2 and test 3 
+
+
+tests are not violated (which means equal catchability across time periods holds and equal survival across time periods holds)
+```{r}
+df_processed = process.data(dfMark,model="CJS")
+dfTest = release.gof(df_processed)
+dfTest
+```
+
+we can use the test2 and test 3 values to get c_hat. Pick the full model - this is the correct answer!
+```{r}
+c_hat_test = dfTest[3,"Chi.square"]/dfTest[3,"df"]
+qaic_full = QAIC(model_no_restriction, k = 2,c = c_hat_test)
+qaic_nested =  QAIC(model_restriction, k = 1,c = c_hat_test)
+qaic_full
+qaic_nested
+```
+
+chat is lower than one... this means underdispersion??
+```{r}
+all_cjs_models = collect.models(type = "CJS")
+all_cjs_models
+```
+
+reject null hypothesis of simpler model. 
+```{r}
+pchisq(all_cjs_models$model.table[2,"Deviance"] - all_cjs_models$model.table[1,"Deviance"],1,lower.tail=FALSE)
+```
+
+
+still pick the full model! awesome
+```{r}
+all_cjs_models_qaic =adjust.chat(c_hat_test,all_cjs_models)
+all_cjs_models_qaic
+```
+
+
+According to manual: 
+
+"While the intuitive thing to do is to simply enter the c estimate
+as estimated (discussed below), there is lack of unanimity on how to handle chat< 1. Some authors
+recommend using the estimated chat, regardless of whether or not it is > 1 or < 1. However, still others
+suggest that if chat < 1, then you should set chat = 1 (i.e., make no adjustment to various metrics). For the
+moment, the jury is out – all we can recommend at this stage is – if chat > 1, then adjust. If chat < 1, then
+set chat = 1, and ‘hold your nose’"
+
+
 
