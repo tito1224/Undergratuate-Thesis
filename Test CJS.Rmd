@@ -35,13 +35,19 @@ source("./Functions/generatePointCount.R")
 source("./Functions/runSimulationFunctions.R")
 ```
 
+# Trial
 
+## Trial CJS
 
+why is deviance df of freedom 12 for the CJS model? 16 individuals were counted recaptured and i am only estimating 2 params - should it not be 14?
 ```{r}
 # remember that Ni can be a list!
+set.seed(2)
 dfMarkInitial = generateDetects(20,0.4,10)
-dfMarkInitial = generateErrors(dfMarkInitial,0.2)
-dfMark = detectsToCapHist(dfMarkInitial)[,"ch"] # for now combine all detections regardless of locationID 
+dfMarkInitial = generateErrors(dfMarkInitial,0.3)
+dfMarkInitial = detectsToCapHist(dfMarkInitial)
+dfMarkInitial$counts = apply(dfMarkInitial[,4:13],1,sum)
+dfMark = dfMarkInitial[,"ch"] # for now combine all detections regardless of locationID 
 
 strFormula = "~1"
 strFormula_phi = "~1"
@@ -53,22 +59,37 @@ model_no_restriction = mark(dfMark, model = strModel, model.parameters = list(Ph
 # should I use adjust parameter?
 ```
 
-Acc not that far off? p_hat = 0.42 and real one is 0.4. Survival (phi) = 0.786 which means that prob of death/removal is 0.214 - this roughly equivalent to the true alpha value of 0.2.
+Acc not that far off? p_hat = 0.41 and real one is 0.4. Survival (phi) = 0.72 which means that prob of death/removal is 0.28 - this roughly equivalent to the true alpha value of 0.3
 ```{r}
 model_no_restriction$results$real
 ```
 
 
+Now set survival probability equal to 1. Because CJS only uses data based on recaptures, we also do not need to worry about conditioning the birth parameter (or net entrants).
+```{r}
+strFormula = "~1"
+strFormula_phi = "~1"
+strModel = "CJS"
+pformula = list(formula = eval(parse_expr(strFormula)),share=TRUE)
+phiformula = list(formula = eval(parse_expr(strFormula_phi)),fixed=1)
+scenarioSimNum=2
+model_restriction = mark(dfMark, model = strModel, model.parameters = list(Phi = phiformula, p=pformula),prefix=scenarioSimNum,delete=TRUE,output=FALSE)
+```
+
+
+```{r}
+model_restriction$results$real
+```
+
+
+
+
+## Trial POPAN
 However for the CJS model we don't get estimates of N. So I'm going to try and use the POPAN model which is a parameterization of the JS model that is robust: https://sites.warnercnr.colostate.edu/gwhite/popan-model/
 
 https://sites.warnercnr.colostate.edu/gwhite/model-structure/
 
 ```{r}
-# remember that Ni can be a list!
-dfMarkInitial = generateDetects(20,0.4,10)
-dfMarkInitial = generateErrors(dfMarkInitial,0.2)
-dfMark = detectsToCapHist(dfMarkInitial)[,"ch"] # for now combine all detections regardless of locationID 
-
 strFormula = "~1"
 strFormula_phi = "~1"
 strFormula_pent = "~1"
@@ -77,10 +98,155 @@ pformula = list(formula = eval(parse_expr(strFormula)),share=TRUE)
 phiformula = list(formula = eval(parse_expr(strFormula_phi)),share=TRUE)
 pentformula= list(formula = eval(parse_expr(strFormula_pent)),share=TRUE)
 scenarioSimNum=2
-model_no_restriction = mark(dfMark, model = strModel, model.parameters = list(Phi = phiformula, p=pformula),prefix=scenarioSimNum,delete=TRUE,output=FALSE)
+model_no_restriction_POPAN = mark(dfMark, model = strModel, model.parameters = list(Phi = phiformula, p=pformula, pent=pentformula),prefix=scenarioSimNum,delete=TRUE,output=FALSE)
+```
+
+POPAN model isn't too off either... esp given given that p is close to 0.4 and 1-phi is close to 0.3 which is the true alpha. 
+```{r}
+model_no_restriction_POPAN$results$real
+```
+
+According to the manual, pent (b_i) is survival between time i and time i+1 -> doesn't make sense with notation in the dataset tho because we have pent t8? So i'm going to assume each pent means after time i-1 and before time i. So it means that b0 = 1-sum(all other pent values) = 0.2773
+
+restricted popan model - issue grabbing correct npar
+```{r}
+strFormula = "~1"
+strFormula_phi = "~1"
+strFormula_pent = "~1"
+strModel = "POPAN"
+pformula = list(formula = eval(parse_expr(strFormula)),share=TRUE)
+phiformula = list(formula = eval(parse_expr(strFormula_phi)),fixed=1)
+pentformula= list(formula = eval(parse_expr(strFormula_pent)), fixed=0)
+scenarioSimNum=2
+model_restricted_POPAN = mark(dfMark, model = strModel, model.parameters = list(Phi = phiformula, p=pformula, pent=pentformula),prefix=scenarioSimNum,delete=TRUE,output=FALSE)
+```
+
+p estimate is appx 0.2 - far off from the true 0.4
+```{r}
+model_restricted_POPAN$results$real
 ```
 
 
 
 
+Overall, although POPAN gives estimates of abundance, the CJS model is less complex and easier to fit. So for now I will just find estimates of probability. I think based on what the result of the hypothesis test is, we can formulate next steps for estimating abundance. 
+
+
+
+# Test GOF
+
+From MARK manual: 
+
+"Now, for the key conceptual step – the difference in fit (deviance) between the saturated model
+and any other model (in this case, the general model in the candidate model set) is asymptotically Chi-squared.
+In MARK, the deviance (as reported in the results browser) is defined as
+the difference in −2 ln(L) between the current model and the saturated model"
+
+## CJS 
+This is saying that the general model I have right now (constant detection probability and constant phi) is not a good fit. 
+```{r}
+nDeviance = model_no_restriction$results$deviance
+nDF = model_no_restriction$results$deviance.df
+pchisq(nDeviance,nDF, lower.tail=FALSE)
+
+nDF
+```
+
+To verify,
+```{r}
+# no params shld be 2
+model_no_restriction$results$npar
+
+# no unique capture histores where the individual is captured > 1 times will be the num of params in the saturated model for CJS
+dfMarkInitial%>%
+  filter(counts>1)%>%
+  ungroup()%>%
+  summarise(n())
+
+# 16 ppl counted > 1 time
+```
+
+
+## Closed
+This is interesting and I would like to compare fit with of closed models..
+```{r}
+model_no_restriction_closed = mark(dfMark, model = "Huggins", model.parameters = list(p=list(formula= "~1",share=TRUE)),prefix=scenarioSimNum,delete=TRUE,output=FALSE)
+```
+
+Close estimate to p for constrained CJS model
+```{r}
+model_no_restriction_closed$results$real
+nDeviance_closed = model_no_restriction_closed$results$deviance
+nDF_closed = model_no_restriction_closed$results$deviance.df
+pchisq(nDeviance_closed,nDF_closed, lower.tail=FALSE)
+nDF_closed
+```
+
+
+## POPAN
+Only one that fits well...too well. Clearly issues here.
+```{r}
+nDeviance_POPAN = model_no_restriction_POPAN$results$deviance
+nDF_POPAN = model_no_restriction_POPAN$results$deviance.df
+pchisq(nDeviance_POPAN,nDF_POPAN, lower.tail=FALSE)
+nDF_POPAN
+```
+# goodness of fit of saturated model with Test 2 and Test 3
+
+...
+
+
+## Compare CJS
+
+
+lrt stat = -2( loglik_1 - loglik_2)
+
+Compare the non-restricted CJS with the restricted CJS via LRT
+
+H0: constrained model 
+HA: unconstrained model
+
+
+Reject the null hypothesis...awesome! It is an unconstrained model (ie survival is not equal to 1)
+
+```{r}
+nDF_noRestriction = model_no_restriction$results$npar
+nDF_Restriction = model_restriction$results$npar
+
+lnl_full = model_no_restriction$results$lnl
+lnl_nested = model_restriction$results$lnl
+
+lnl_full
+lnl_nested 
+
+
+lrt_stat = lnl_nested-(lnl_full)
+df_cjs = nDF_noRestriction-nDF_Restriction
+
+pchisq(lrt_stat, df_cjs, lower.tail=FALSE)
+```
+Note: is it an issue that the general model (unconstrained) does not have an overall good fit? mark handbook was saying we should use the QAIC OR modify the LRT.
+
+
+
+```{r}
+QAIC = function(model,k,c){
+  lnl = model$results$lnl
+  counts = str_count(model$data$data$ch,"1")
+  n = length(counts[counts>1]) # no individuals released & recaptured
+  val = (lnl/c) + 2*k+ ((2*k*(k+1))/(n-k-1))
+  return(val)
+   
+}
+
+```
+
+pick the full model anyways! which is the correct ans
+```{r}
+c_hat = lrt_stat/df_cjs
+qaic_full = QAIC(model_no_restriction, k = 2,c = c_hat)
+qaic_nested =  QAIC(model_restriction, k = 2,c = c_hat)
+qaic_full
+qaic_nested
+```
 
