@@ -55,7 +55,7 @@ strModel = "CJS"
 pformula = list(formula = eval(parse_expr(strFormula)),share=TRUE)
 phiformula = list(formula = eval(parse_expr(strFormula_phi)),share=TRUE)
 scenarioSimNum=2
-model_no_restriction = mark(dfMark, model = strModel, model.parameters = list(Phi = phiformula, p=pformula),prefix=scenarioSimNum,delete=TRUE,output=FALSE)
+model_no_restriction = mark(dfMark, model = strModel, model.parameters = list(Phi = phiformula, p=pformula),prefix=scenarioSimNum,delete=TRUE,output=FALSE,model.name="cjs_unconstrain")
 # should I use adjust parameter?
 ```
 
@@ -73,7 +73,7 @@ strModel = "CJS"
 pformula = list(formula = eval(parse_expr(strFormula)),share=TRUE)
 phiformula = list(formula = eval(parse_expr(strFormula_phi)),fixed=1)
 scenarioSimNum=2
-model_restriction = mark(dfMark, model = strModel, model.parameters = list(Phi = phiformula, p=pformula),prefix=scenarioSimNum,delete=TRUE,output=FALSE)
+model_restriction = mark(dfMark, model = strModel, model.parameters = list(Phi = phiformula, p=pformula),prefix=scenarioSimNum,delete=TRUE,output=FALSE,model.name="cjs_constrain")
 ```
 
 
@@ -292,6 +292,7 @@ all_cjs_models_qaic
 ```
 
 
+
 According to manual: 
 
 "While the intuitive thing to do is to simply enter the c estimate
@@ -303,3 +304,39 @@ set chat = 1, and ‘hold your nose’"
 
 
 
+# Test R Script for Closure
+```{r}
+source("testclosure.R")
+```
+
+```{r}
+testData=loadData()
+```
+
+```{r}
+df_80_100 = testData%>%filter(id== "80_100")
+gofResult = testGOF_CJS(ch = df_80_100[,'ch'],scenarioSimNum="80_100")
+```
+```{r}
+gofResult
+```
+
+```{r}
+allResults = runAllClosureTests()
+```
+
+
+small p for CJS means closure assumption is rejected! Small p in Otis means closure assumption is rejected. 
+```{r}
+allResults%>%
+  select(id, ch, p_1m, alpha, param, CJS_estimate, p_CJS, model,pOverall_Otis,avgQi, nDistinctIndividuals)%>%
+  distinct()
+```
+
+```{r}
+allResults%>%
+  select(id,p_1m, alpha, param, CJS_estimate, p_CJS,pOverall_Otis,avgQi)%>%
+  distinct()
+```
+
+Ready to now run on the super computer!

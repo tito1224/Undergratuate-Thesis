@@ -385,13 +385,13 @@ otisDetectClosure = function(df, nID = NULL){
            Difference= EQ-EQi,
            VarQi = (2*(maxMinute-counts)*(counts-1)*(maxMinute+1))/((counts+2)*((counts+1)^2)*fk ),
            Ck = (EQ-EQi)/sqrt(VarQi),
-           p_k= pnorm(Ck, lower.tail=TRUE))%>%
+           p_k_Otis= pnorm(Ck, lower.tail=TRUE))%>%
     filter(!duplicated(id))
   
   dfStats = dfStats%>%
     group_by(id)%>%
     mutate(C = sum(EQ - EQi)/sqrt(sum(VarQi)),
-           pOverall = pnorm(C,lower.tail=TRUE))
+           pOverall_Otis = pnorm(C,lower.tail=TRUE))
 
   # merge with original dataframe
   df = left_join(df, dfStats, by = c("id","counts"))
