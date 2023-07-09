@@ -62,8 +62,8 @@ loadData = function(strPath = "./DigitalAllianceOutput/Huggins"){
   dfHistoryFinalH$counts = rowSums(dfHistoryFinalH[,colnamesUse],na.rm=TRUE)
   dfHistoryFinalH$bCounts = ifelse(dfHistoryFinalH$counts > 1,">1","=1")
   
-  dfHistoryFinalH=dfHistoryFinalH%>%
-    filter(id %in% c("80_100","80_150"))
+  # dfHistoryFinalH=dfHistoryFinalH%>%
+  #   filter(id %in% c("80_100","80_150"))
   
   return(dfHistoryFinalH)
 }
