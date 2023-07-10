@@ -1,3 +1,6 @@
+# set MarkPath (only for running on supercomputer)
+#MarkPath = "/home/oadebajo/bin"
+
 # load libraries
 library(tidyverse)
 library(gtools)
@@ -6,9 +9,9 @@ library(matrixStats)
 library(RMark)
 library(stringi)
 library(rlang)
-library(gt)
-library(gtExtras)
-library(webshot2)
+#library(gt)
+#library(gtExtras)
+#library(webshot2)
 library(knitr)
 library(readxl)
 
@@ -109,19 +112,20 @@ testGOF_CJS = function(ch,str_pFormula="~1",str_phiFormula="~1",strModel="CJS",s
   #HA: more general/unconstrained model is true
   
   # grab chat values using TEST 2 and TEST 3 and decide based on chat whether to use quasi likelihood
-  df_processed = process.data(ch,model=strModel)
-  dfChiSquare = release.gof(df_processed,title = scenarioSimNum)
-  c_hat = dfChiSquare[3,"Chi.square"]/dfChiSquare[3,"df"]
+  #df_processed = process.data(ch,model=strModel)
+  #dfChiSquare = release.gof(df_processed,title = scenarioSimNum)
+  #c_hat = dfChiSquare[3,"Chi.square"]/dfChiSquare[3,"df"]
   
   # if c_hat < 1 do nothing, else, use QAICc and quasi likelihood
   all_cjs_models = collect.models(type = "CJS")
-  if (c_hat <1){
-    all_cjs_models$model.table$p_CJS = pchisq(all_cjs_models$model.table[2,"Deviance"] - all_cjs_models$model.table[1,"Deviance"],1,lower.tail=FALSE)
-  } else {
-    all_cjs_models =adjust.chat(c_hat_test,all_cjs_models)
-    all_cjs_models$model.table$p_CJS = pchisq(all_cjs_models$model.table[2,"QDeviance"] - all_cjs_models$model.table[1,"QDeviance"],1,lower.tail=FALSE)
-  }
+  #if (c_hat <1){
+  #  all_cjs_models$model.table$p_CJS = pchisq(all_cjs_models$model.table[2,"Deviance"] - all_cjs_models$model.table[1,"Deviance"],1,lower.tail=FALSE)
+  #} else {
+  #  all_cjs_models =adjust.chat(c_hat_test,all_cjs_models)
+  #  all_cjs_models$model.table$p_CJS = pchisq(all_cjs_models$model.table[2,"QDeviance"] - all_cjs_models$model.table[1,"QDeviance"],1,lower.tail=FALSE)
+  #}
   
+  all_cjs_models$model.table$p_CJS = pchisq(all_cjs_models$model.table[2,"Deviance"] - all_cjs_models$model.table[1,"Deviance"],1,lower.tail=FALSE)
   all_cjs_models$model.table$id = scenarioSimNum
   all_cjs_models$model.table$bConstrained = ifelse(all_cjs_models$model.table$npar>1,0,1)
   
@@ -132,8 +136,12 @@ testGOF_CJS = function(ch,str_pFormula="~1",str_phiFormula="~1",strModel="CJS",s
 
 ####### RUN CLOSURE TESTS #####
 
-runAllClosureTests = function(){
-  dfAllData= loadData()
+runAllClosureTests = function(nCombinationNumber = 1,strPath = "./DigitalAllianceOutput/Huggins" ){
+  #dfAllData= loadData(strPath = strPath) # update strPath for running on HPC
+  dfAllData = loadData()
+  dfAllData = dfAllData%>%
+    filter(combinationNumber == nCombinationNumber)%>%
+    filter(id == "1_100")
   lstUniqueID = unique(dfAllData$id)
   
   dfCJS = data.frame()
@@ -142,6 +150,11 @@ runAllClosureTests = function(){
   for (tempID in lstUniqueID){
     dfTemp = dfAllData %>%
       filter(id == tempID)
+    
+    # do not use cases where no individual was detected
+    if(sum(dfTemp$counts)==0){
+      next()
+    }
     
     dfTempCJS = testGOF_CJS(ch = dfTemp[,"ch"], scenarioSimNum = tempID)
     dfCJS = rbind(dfCJS, dfTempCJS)
@@ -157,6 +170,36 @@ runAllClosureTests = function(){
 }
 
 
+# return results (for HPC)
+# set array to 1-100
 
+## Read command line arguments
+args = commandArgs(trailingOnly=TRUE)
+
+## Set job number
+id = as.integer(args[1]) 
+#id=1
+# set up parameters
+nRuns = 1000
+lstNi = c(10,20)
+lstP = c(0.1,0.2,0.3,0.4,0.5)
+#lstAlpha = c(0)
+lstAlpha =c(0,0.05,0.1,0.2,0.3)
+lstMaxMin = c(5,10)
+lstFormula = c("~1")
+lstMixtures = c(1)
+lstSeed = c("NULL")
+strModel = "Huggins"
+
+params = expand.grid(nRuns,lstNi,lstP, lstAlpha, lstMaxMin,lstFormula,lstMixtures,lstSeed,strModel)
+colnames(params) = c("nRuns","lstNi","lstP","lstAlpha","lstMaxMin","lstFormula","lstMixtures","lstSeed","strModel")
+params$lstFormula = as.character(params$lstFormula) # for some reason this column turns into a factor variable?
+params$lstSeed = as.character(params$lstSeed) # for some reason i need to wrap this with as.character()
+params$Scenario = 1:nrow(params)
+
+
+results = runAllClosureTests(nCombinationNumber=params[id,"Scenario"], strPath = "./FinalOutput")
+outfile = paste0("Closure/closure_test_",id,".rds") # note that the Closure folder is in the FinalOutput folder
+saveRDS(results,outfile)
 
 

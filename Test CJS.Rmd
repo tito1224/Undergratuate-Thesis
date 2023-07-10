@@ -314,8 +314,15 @@ testData=loadData()
 ```
 
 ```{r}
-df_80_100 = testData%>%filter(id== "80_100")
-gofResult = testGOF_CJS(ch = df_80_100[,'ch'],scenarioSimNum="80_100")
+testData%>%
+  filter(id == "1_106")
+```
+
+
+
+```{r}
+df_80_100 = testData%>%filter(id== "1_106") #80_100
+gofResult = testGOF_CJS(ch = df_80_100[,'ch'],scenarioSimNum="1_106")
 ```
 ```{r}
 gofResult
