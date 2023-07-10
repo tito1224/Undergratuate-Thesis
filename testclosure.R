@@ -136,12 +136,11 @@ testGOF_CJS = function(ch,str_pFormula="~1",str_phiFormula="~1",strModel="CJS",s
 
 ####### RUN CLOSURE TESTS #####
 
-runAllClosureTests = function(nCombinationNumber = 1,strPath = "./DigitalAllianceOutput/Huggins" ){
-  #dfAllData= loadData(strPath = strPath) # update strPath for running on HPC
-  dfAllData = loadData()
+runAllClosureTests = function(nCombinationNumber= 1,strPath = "./FinalOutput" ){
+  dfAllData= loadData(strPath = strPath) # update strPath for running on HPC
   dfAllData = dfAllData%>%
     filter(combinationNumber == nCombinationNumber)%>%
-    filter(id == "1_100")
+    filter(id %in% c("1_1","1_2","1_3"))
   lstUniqueID = unique(dfAllData$id)
   
   dfCJS = data.frame()
@@ -151,55 +150,68 @@ runAllClosureTests = function(nCombinationNumber = 1,strPath = "./DigitalAllianc
     dfTemp = dfAllData %>%
       filter(id == tempID)
     
+    #print("ch being used")
+    #print(dfTemp[,c("id","individual","ch")])
+    
     # do not use cases where no individual was detected
     if(sum(dfTemp$counts)==0){
       next()
-    }
+    }  
     
     dfTempCJS = testGOF_CJS(ch = dfTemp[,"ch"], scenarioSimNum = tempID)
+    #print("CJS results")
+    #print(dfTempCJS)
     dfCJS = rbind(dfCJS, dfTempCJS)
     
   }
   
-  dfAllData = left_join(dfAllData, dfCJS, by = "id")
+  #print("final df before joining")
+  #print(dfAllData[,c("id","individual","ch")])
+  #print(dfCJS)
+  #df_CJS_Analysis = left_join(dfAllData, dfCJS, by = "id")
+  #print(dfAllData[,c("id","individual","ch")])
   
   # run OTIS Tests
-  dfAllData = otisDetectClosure(dfAllData)
+  #df_OTIS_Analysis = otisDetectClosure(dfAllData)[,c("id","vi","wi","qi","fk","EQi","EQ","VarQi","Ck","p_k_Otis","C","pOverall_Otis","avgQi")]
+  #dfFinalData = left_join(df_CJS_Analysis, df_OTIS_Analysis, by = "id")
+  #print("final result")
+  #print(dfFinalData)
   
-  return(dfAllData)
+  return(dfCJS)
 }
 
 
 # return results (for HPC)
 # set array to 1-100
+# uncomment the bottom to run on hpc
 
 ## Read command line arguments
-args = commandArgs(trailingOnly=TRUE)
+#args = commandArgs(trailingOnly=TRUE)
 
 ## Set job number
-id = as.integer(args[1]) 
+#id = as.integer(args[1]) 
 #id=1
 # set up parameters
-nRuns = 1000
-lstNi = c(10,20)
-lstP = c(0.1,0.2,0.3,0.4,0.5)
+#nRuns = 1000
+#lstNi = c(10,20)
+#lstP = c(0.1,0.2,0.3,0.4,0.5)
 #lstAlpha = c(0)
-lstAlpha =c(0,0.05,0.1,0.2,0.3)
-lstMaxMin = c(5,10)
-lstFormula = c("~1")
-lstMixtures = c(1)
-lstSeed = c("NULL")
-strModel = "Huggins"
+#lstAlpha =c(0,0.05,0.1,0.2,0.3)
+#lstMaxMin = c(5,10)
+#lstFormula = c("~1")
+#lstMixtures = c(1)
+#lstSeed = c("NULL")
+#strModel = "Huggins"
 
-params = expand.grid(nRuns,lstNi,lstP, lstAlpha, lstMaxMin,lstFormula,lstMixtures,lstSeed,strModel)
-colnames(params) = c("nRuns","lstNi","lstP","lstAlpha","lstMaxMin","lstFormula","lstMixtures","lstSeed","strModel")
-params$lstFormula = as.character(params$lstFormula) # for some reason this column turns into a factor variable?
-params$lstSeed = as.character(params$lstSeed) # for some reason i need to wrap this with as.character()
-params$Scenario = 1:nrow(params)
+#params = expand.grid(nRuns,lstNi,lstP, lstAlpha, lstMaxMin,lstFormula,lstMixtures,lstSeed,strModel)
+#colnames(params) = c("nRuns","lstNi","lstP","lstAlpha","lstMaxMin","lstFormula","lstMixtures","lstSeed","strModel")
+#params$lstFormula = as.character(params$lstFormula) # for some reason this column turns into a factor variable?
+#params$lstSeed = as.character(params$lstSeed) # for some reason i need to wrap this with as.character()
+#params$Scenario = 1:nrow(params)
 
 
-results = runAllClosureTests(nCombinationNumber=params[id,"Scenario"], strPath = "./FinalOutput")
-outfile = paste0("Closure/closure_test_",id,".rds") # note that the Closure folder is in the FinalOutput folder
-saveRDS(results,outfile)
+#results = runAllClosureTests(nCombinationNumber=params[id,"Scenario"], strPath = "./FinalOutput")
+#outfile = paste0("Closure2/closure_test_CJS",id,".rds") # note that the Closure folder is in the FinalOutput folder
+#saveRDS(results,outfile)
 
 

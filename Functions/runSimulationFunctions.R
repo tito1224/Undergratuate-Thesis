@@ -378,7 +378,9 @@ otisDetectClosure = function(df, nID = NULL){
   
   # make a dataframe of test statistic components and p values
   dfStats = df %>%
-    group_by(id, counts)%>%
+    group_by(id)%>%
+    filter(!duplicated(individual))%>%
+    group_by(id,counts)%>%
     summarise(fk = n(),
            EQi = ((counts-1)*(maxMinute+1))/(counts+1),
            EQ = sum(qi)/fk,

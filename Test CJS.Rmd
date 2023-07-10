@@ -53,7 +53,7 @@ strFormula = "~1"
 strFormula_phi = "~1"
 strModel = "CJS"
 pformula = list(formula = eval(parse_expr(strFormula)),share=TRUE)
-phiformula = list(formula = eval(parse_expr(strFormula_phi)),share=TRUE)
+phiformula = list(formula = eval(parse_expr(strFormula_phi)))
 scenarioSimNum=2
 model_no_restriction = mark(dfMark, model = strModel, model.parameters = list(Phi = phiformula, p=pformula),prefix=scenarioSimNum,delete=TRUE,output=FALSE,model.name="cjs_unconstrain")
 # should I use adjust parameter?
