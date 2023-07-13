@@ -134,6 +134,35 @@ testGOF_CJS = function(ch,str_pFormula="~1",str_phiFormula="~1",strModel="CJS",s
 }
 
 
+# function to test GOF
+testGOF_RELEASE = function(df){
+  ch = df[,"ch"]
+  
+  # if all zero's are encountered, skip
+  if(sum(df$counts)==0){
+    chat = NA
+  } else {
+    ch_processed =process.data(ch,model="CJS")
+    
+    # sometimes an error occurs where it the program terminates and idk what causes it
+    # an example is if we use id 1_1
+    # in that case I will write a tryCatch and set the chat value to NA
+    tryCatch({
+      ch_RELEASE = release.gof(ch_processed)
+    },error=function(e){} )
+    
+    if(!exists("ch_RELEASE")){
+      chat = NA
+    } else{
+      chat = ch_RELEASE[3,"Chi.square"]/ch_RELEASE[3,"df"] 
+    }
+    
+  }
+  dfChat = tibble(chat_val = chat)
+  return(dfChat) 
+}
+
+
 ####### RUN CLOSURE TESTS #####
 
 runAllClosureTests = function(nCombinationNumber= 1,strPath = "./FinalOutput" ){

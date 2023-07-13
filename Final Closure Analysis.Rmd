@@ -1,0 +1,472 @@
+---
+title: "Final Closure Analysis"
+author: "Tito"
+date: "2023-07-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load Capture History
+```{r}
+library(tidyverse)
+library(gtools)
+library(data.table)
+library(matrixStats)
+library(RMark)
+library(stringi)
+library(rlang)
+library(gt)
+library(gtExtras)
+library(webshot2)
+library(knitr)
+library(readxl)
+```
+
+Load functions from the other R scripts.
+```{r}
+source("./Functions/generatePointCount.R")
+source("./Functions/runSimulationFunctions.R")
+source("testClosure.R")
+```
+
+# Load Data
+
+## Load CJS Results
+```{r}
+strPath = "./DigitalAllianceOutput/Closure2"
+setwd(strPath)
+dataFinalTrial = list.files(pattern = ".rds") # load rds files
+dataFinalTrial = dataFinalTrial%>%  
+  map(readRDS)
+
+# initialize empty dataframes to store the data
+dfClosure_CJS = data.frame()
+#counter = 1
+
+# loop through the rds files and retrive data 
+for (item in dataFinalTrial){
+  dfClosure_CJS = rbind(dfClosure_CJS, item)
+  #counter = counter + 1
+}
+```
+
+
+```{r}
+# this code is what was used in the ./Functions/runSimulation.R file to generate scenarios to input into the HPC 
+nRuns = 1000
+lstNi = c(10,20)
+lstP = c(0.1,0.2,0.3,0.4,0.5)
+#lstAlpha = c(0)
+lstAlpha =c(0,0.05,0.1,0.2,0.3)
+lstMaxMin = c(5,10)
+lstFormula = c("~1")
+lstMixtures = c(1)
+lstSeed = c("NULL")
+strModel = "Huggins"
+
+params = expand.grid(nRuns,lstNi,lstP, lstAlpha, lstMaxMin,lstFormula,lstMixtures,lstSeed,strModel)
+colnames(params) = c("nRuns","N","p_1m","alpha","maxMinute","strFormula","lstMixtures","lstSeed","strModel")
+params$Scenario = 1:nrow(params)
+
+# merge the params dataframe with the dataframe of estimates to help with calculating summary statistics 
+dfClosure_CJS$combinationNumber = as.integer(str_split_fixed(dfClosure_CJS$id, "_",2)[,1])
+dfClosure_CJS = left_join(dfClosure_CJS,params,by=c("combinationNumber"="Scenario")) 
+dfClosure_CJS$paramSimple= ifelse(grepl('Phi', dfClosure_CJS$param)==TRUE, "phi","p")
+head(dfClosure_CJS)
+```
+
+
+## Load Otis Results
+```{r}
+dfOriginalData = loadData()
+```
+
+Compute Otis test statistics
+```{r}
+dfOtisTest = otisDetectClosure(dfOriginalData)
+```
+```{r}
+dfOriginalData%>%
+  filter(id == "1_1")
+
+dfOtisTest%>%
+  filter(id == "1_1")
+```
+
+## Combine Test Results
+
+```{r}
+dfClosure_CJS_Summary = dfClosure_CJS%>%
+  select(id, p_CJS)%>%
+  filter(!duplicated(id))
+
+dfOtisTest_Summary = dfOtisTest%>%
+  select(id, N,p_1m,alpha,maxMinute,pOverall_Otis)%>%
+  filter(!duplicated(id))
+
+dfClosure = left_join(dfOtisTest_Summary,dfClosure_CJS_Summary,by="id")
+head(dfClosure)
+```
+
+
+# Graph Results
+
+## Otis
+
+### Wait Time (Qi)
+
+Not that informative when maxMin = 5. But overall same pattern
+```{r}
+# if qi <0 it means there was only one detection
+dfOtisTest%>%
+  filter(N == 20 & maxMinute == 5)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = qi, color = as.factor(alpha)))+ 
+  #facet_wrap(~maxMinute)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+
+dfOtisTest%>%
+  filter(N == 20 & maxMinute == 10)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = qi, color = as.factor(alpha)))+ 
+  #facet_wrap(~maxMinute)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+```
+
+
+
+### Conditional Test Statistic (C_k)
+
+Now I will look at the distribution of the p values associated with the test statistic C_k across various scenarios. 
+
+
+When N = 10 and only five capture occasions, Otis test does not reject closure on average. Note that low population and low capture occasion means that we use only 1-2 individuals to calculate the conditional test statistic - this does not seem to be a good idea.  
+```{r}
+dfOtisTest%>%
+  filter(N == 10 & maxMinute == 5)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = p_k_Otis, color = as.factor(alpha)))+ 
+  geom_hline(aes(yintercept=0.05), color = "grey30")+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+
+dfOtisTest%>%
+  filter(N == 10 & maxMinute == 10)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = p_k_Otis, color = as.factor(alpha)))+ 
+   geom_hline(aes(yintercept=0.05), color = "grey30")+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+```
+
+
+I think its weird that the case of p_1m = 0.1 isn't producing lower p values - esp when alpha = 0.3. Esp given that N = 20 and maxMin = 10. Check the data for some of these
+
+```{r}
+# alpha = 0.3 and p_1m = 0.1 and maxMin = 10 and N = 20 is scenario 92
+
+dfOtisTest%>%
+  filter(combinationNumber==92)%>%
+  arrange(desc(p_k_Otis))%>%
+  head(10)%>%
+  select(id, fk, counts, p_k_Otis, Ck)
+```
+
+has a super long wait time - makes sense that it wasn't rejected...
+```{r}
+dfOtisTest%>%
+  filter(id == "92_344")
+```
+
+
+The issue with the p_k_Otis value is that this is all based on only 3 or 4 individuals which is not great and feels like it is subject to a lot of variability. 
+
+
+you can see that in cases where there are a lot of actual splits in the data, the p val is low (ie 92_897)
+
+when maxmin is five we rarely ever reject... probs because the Eqi is incredibly low.
+
+```{r}
+dfOriginalData%>%
+  filter(id== "92_897")
+dfOtisTest%>%
+  filter(id=="92_897")%>%
+  select(id, fk, counts, p_k_Otis, Ck)
+```
+
+
+### Overall Test Statistic (C)
+
+The smaller the test statistic C is, the more evidence against closure. Still requires a lot of evidence to reject the closure assumption - only when p = 0.3 or higher do we begin to see some reasonableness. But really p must equal 0.5 in order to actually reject closure @ the smallest alpha. Test is done right because when alpha = 0, closure is never rejected, even when p_1m is small.
+```{r}
+dfOtisTest%>%
+  filter(N == 20 & maxMinute == 5)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = C, color = as.factor(alpha)))+ 
+  geom_hline(yintercept = qnorm(0.05, lower.tail=TRUE),color = "grey20",size=0.8)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+
+dfOtisTest%>%
+  filter(N == 20 & maxMinute == 10)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = C, color = as.factor(alpha)))+ 
+  geom_hline(yintercept = qnorm(0.05, lower.tail=TRUE),color = "grey20",size=0.8)+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+```
+
+
+## CJS
+
+### Estimates
+
+Curious about how my estimates of p differ from the true values
+
+```{r}
+dfClosure_CJS%>%
+  filter(N==20 & maxMinute == 10 & paramSimple == "p")
+```
+
+
+```{r}
+dfClosure_CJS_Estimate= dfClosure_CJS%>%
+  filter(N==20 & maxMinute == 10 & paramSimple=="p")
+
+ggplot(dfClosure_CJS_Estimate)+ 
+  geom_boxplot(aes(x=as.factor(p_1m), y = CJS_estimate, color = as.factor(alpha)))+ 
+  facet_wrap(~bConstrained)+
+  theme_bw()
+```
+
+
+Median estimates vs the true value 
+```{r}
+dfClosure_CJS_Estimate%>%
+  filter(paramSimple=="p" & N==20 & maxMinute == 10)%>%
+  group_by(p_1m,alpha,N,maxMinute,bConstrained)%>%
+  summarise(median = median(CJS_estimate))%>%
+  ggplot()+ 
+  geom_point(aes(x=alpha,y=median, color = as.factor(p_1m) ))+
+  geom_line(aes(x=alpha,y=p_1m, color= as.factor(p_1m)))+
+  facet_wrap(~bConstrained)+
+  theme_bw()+
+  labs(subtitle = "Horizontal line represents true per minute detection probability")
+```
+
+
+```{r}
+dfClosure_CJS_Estimate%>%
+  filter(paramSimple=="p" & N==20 & maxMinute == 10)%>%
+  group_by(p_1m,alpha,N,maxMinute,bConstrained)%>%
+  summarise(median = median(CJS_estimate))%>%
+  ggplot()+ 
+  geom_point(aes(x=p_1m,y=median, color = as.factor(alpha) ))+
+  geom_line(aes(x=p_1m,y=p_1m, color= as.factor(alpha)))+
+  facet_wrap(~bConstrained)+
+  theme_bw()+
+  labs(subtitle = "Horizontal line represents true per minute detection probability")
+```
+
+
+
+Now estimates of "alpha" - perfect
+```{r}
+dfClosure_CJS%>%
+  filter(N==20 & maxMinute == 10 & paramSimple=="phi" & bConstrained==0)%>%
+  mutate(alphaHat = 1-CJS_estimate)%>%
+ggplot()+ 
+  geom_boxplot(aes(x=as.factor(p_1m), y = alphaHat, color = as.factor(alpha)))+ 
+  theme_bw()
+```
+
+```{r}
+dfClosure_CJS%>%
+  filter(paramSimple=="phi" & N==20 & maxMinute == 10 & bConstrained==0)%>%
+  group_by(p_1m,alpha,N,maxMinute,bConstrained)%>%
+  summarise(median = median(1-CJS_estimate))
+```
+
+
+
+### Closure Test
+
+I used deviance to figure out what the p value should be. Theoretically I should be using c_hat to adjust, but for now I will keep it as it is. 
+
+First, test to make sure i calculated estimates and p value right
+```{r}
+dfMark = dfOriginalData%>%
+  filter(id == "1_1")
+dfMark = dfMark[,"ch"]
+strFormula = "~1"
+strFormula_phi = "~1"
+strModel = "CJS"
+pformula = list(formula = eval(parse_expr(strFormula)),share=TRUE)
+phiformula = list(formula = eval(parse_expr(strFormula_phi)))
+scenarioSimNum=2
+model_no_restriction = mark(dfMark, model = strModel, model.parameters = list(Phi = phiformula, p=pformula),prefix=scenarioSimNum,delete=TRUE,output=FALSE,model.name="cjs_unconstrain")
+model_no_restriction$results$real
+```
+
+unrestrained model
+```{r}
+strFormula = "~1"
+strFormula_phi = "~1"
+strModel = "CJS"
+pformula = list(formula = eval(parse_expr(strFormula)),share=TRUE)
+phiformula = list(formula = eval(parse_expr(strFormula_phi)),fixed=1)
+scenarioSimNum=2
+model_restriction = mark(dfMark, model = strModel, model.parameters = list(Phi = phiformula, p=pformula),prefix=scenarioSimNum,delete=TRUE,output=FALSE,model.name="cjs_constrain")
+model_restriction$results$real
+```
+
+```{r}
+# local results
+all_cjs_models = collect.models(type = "CJS")
+all_cjs_models$model.table
+
+
+dfClosure_CJS%>%
+  filter(id == "1_1")
+```
+
+
+This is interesting... I would expect that when alpha = 0 there should be no rejections of closure. Will investigate this case first
+```{r}
+dfClosure_CJS%>%
+  filter(N == 20 & maxMinute == 10 & !duplicated(id))%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = p_CJS, color = as.factor(alpha)))+ 
+   geom_hline(aes(yintercept=0.05), color = "grey30")+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()
+```
+
+
+#### Alpha = 0
+
+Investigate this because when alpha = 0 we should not be rejecting closure
+```{r}
+dfAlpha_0 = dfClosure_CJS%>%
+  filter(alpha ==0 & p_CJS< 0.05 )%>%
+  arrange(p_CJS)
+
+dfAlpha_0
+```
+
+
+Let's look @ the first case of id 51_434
+```{r}
+dfOriginalData%>%
+  filter(id == "51_434")
+```
+
+First check that everything was fit properly
+
+unrestrained model
+```{r}
+dfMark = dfOriginalData%>%
+  filter(id == "51_434")
+dfMark = dfMark[,"ch"]
+strFormula = "~1"
+strFormula_phi = "~1"
+strModel = "CJS"
+pformula = list(formula = eval(parse_expr(strFormula)),share=TRUE)
+phiformula = list(formula = eval(parse_expr(strFormula_phi)))
+scenarioSimNum=2
+model_no_restriction = mark(dfMark, model = strModel, model.parameters = list(Phi = phiformula, p=pformula),prefix=scenarioSimNum,delete=TRUE,output=FALSE,model.name="cjs_unconstrain")
+model_no_restriction$results$real
+```
+
+The chat of this model is *much* larger than 1 - so it
+```{r}
+strFormula = "~1"
+strFormula_phi = "~1"
+strModel = "CJS"
+pformula = list(formula = eval(parse_expr(strFormula)),share=TRUE)
+phiformula = list(formula = eval(parse_expr(strFormula_phi)),fixed=1)
+scenarioSimNum=2
+model_restriction = mark(dfMark, model = strModel, model.parameters = list(Phi = phiformula, p=pformula),prefix=scenarioSimNum,delete=TRUE,output=FALSE,model.name="cjs_constrain")
+model_restriction$results$real
+```
+
+
+```{r}
+model_no_restriction$results$lnl
+model_restriction$results$lnl
+
+all_cjs_models = collect.models(type = "CJS")
+all_cjs_models$model.table
+
+dfClosure_CJS%>%
+  filter(id == "51_434")
+```
+AICc would say pick the unconstrained model...
+
+```{r}
+pchisq(24.12429-38.71253,1,lower.tail=FALSE)
+```
+
+Try with chat..lol. Is it just that my data for this case is too sparse???
+
+TEST2 : So, TEST2 asks ‘of those marked animals not seen at (i+1), but known to be alive at (i+1) (since they
+were captured after i+1), does when they were next seen (i+2, i+3...) depend on whether or not they were
+seen at (i)? In practice, TEST 2 is perhaps most useful for testing the basic assumption of ‘equal
+catchability’ of marked animals
+
+TEST3: In general, TEST 3 tests the assumption that all marked animals alive at (i) have the same probability
+of surviving to (i+1) – the second CJS assumption. In other words, does the probability that an individual known to be alive at occasion (i) is ever seen again depend on whether it was marked at or before occasion (i)?
+
+So, in a very loose sense, TEST 2 deals with ‘recapture problems’, while TEST 3 deals with
+‘survival problems’
+
+
+
+Interesting because 51_434, 8_476, etc will give c hat values of 0. Maybe I can write a function to calculate the chat and if it gives 0 I can remove those data points? I still don't understand what is causing these issues, so verify w Dr. Bonner
+
+```{r}
+dfMark = dfOriginalData%>%
+  filter(id == "8_476")
+dfMark = dfMark[,"ch"]
+dfMark
+
+dfMark_processed =process.data(dfMark,model="CJS")
+dfMark_RELEASE = release.gof(dfMark_processed)
+dfMark_RELEASE
+chat = dfMark_RELEASE[3,"Chi.square"]/dfMark_RELEASE[3,"df"]
+```
+
+Do I need to remove all individuals encountered only once?? Since the CJS is dependent on being recaptured at least once....
+```{r}
+dfMark = dfOriginalData%>%
+  filter(id == "8_476" & counts >1)
+dfMark = dfMark[,"ch"]
+dfMark
+
+dfMark_processed =process.data(dfMark,model="CJS")
+dfMark_RELEASE = release.gof(dfMark_processed)
+dfMark_RELEASE
+chat = dfMark_RELEASE[3,"Chi.square"]/dfMark_RELEASE[3,"df"]
+```
+
+
+
+```{r}
+# i could do this but it will actually take forever and ruin my computer
+# dfChat = dfOriginalData%>%
+#   group_by(id)%>%
+#   group_modify(~testGOF_RELEASE(.x))
+```
+
+### Analysis with AIC
+
+Ok so I will bite the bullet and use AIC instead
+
+
+
+
