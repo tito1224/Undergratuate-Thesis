@@ -125,7 +125,12 @@ testGOF_CJS = function(ch,str_pFormula="~1",str_phiFormula="~1",strModel="CJS",s
   #  all_cjs_models$model.table$p_CJS = pchisq(all_cjs_models$model.table[2,"QDeviance"] - all_cjs_models$model.table[1,"QDeviance"],1,lower.tail=FALSE)
   #}
   
-  all_cjs_models$model.table$p_CJS = pchisq(all_cjs_models$model.table[2,"Deviance"] - all_cjs_models$model.table[1,"Deviance"],1,lower.tail=FALSE)
+  # H0 is the constrained model and Ha is the unconstrained model. But with respect to LRT it is -2lnl_U - (-2lnl_c)
+  #all_cjs_models$model.table$p_CJS = pchisq(modelUnconstrained$results$lnl - modelConstrained$results$lnl,1, lower.tail = FALSE)
+  #all_cjs_models$model.table$p_CJS = pchisq(all_cjs_models$model.table[2,"Deviance"] - all_cjs_models$model.table[1,"Deviance"],1,lower.tail=FALSE)
+  index_U = which(all_cjs_models$model.table$npar == 2)
+  index_C = which(all_cjs_models$model.table$npar == 1)
+  all_cjs_models$model.table$p_CJS = pchisq(all_cjs_models$model.table[index_C,"Deviance"] - all_cjs_models$model.table[index_U,"Deviance"],1,lower.tail=FALSE)
   all_cjs_models$model.table$id = scenarioSimNum
   all_cjs_models$model.table$bConstrained = ifelse(all_cjs_models$model.table$npar>1,0,1)
   

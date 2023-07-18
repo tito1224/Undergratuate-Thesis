@@ -36,7 +36,7 @@ source("testClosure.R")
 
 ## Load CJS Results
 ```{r}
-strPath = "./DigitalAllianceOutput/Closure2"
+strPath = "./DigitalAllianceOutput/Closure3"
 setwd(strPath)
 dataFinalTrial = list.files(pattern = ".rds") # load rds files
 dataFinalTrial = dataFinalTrial%>%  
@@ -88,13 +88,7 @@ Compute Otis test statistics
 ```{r}
 dfOtisTest = otisDetectClosure(dfOriginalData)
 ```
-```{r}
-dfOriginalData%>%
-  filter(id == "1_1")
 
-dfOtisTest%>%
-  filter(id == "1_1")
-```
 
 ## Combine Test Results
 
@@ -221,6 +215,17 @@ ggplot()+
   theme_bw()
 ```
 
+```{r}
+dfOtisTest%>%
+  filter(N == 20 & maxMinute == 10)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = pOverall_Otis, color = as.factor(alpha)))+ 
+   geom_hline(aes(yintercept=0.05), color = "grey30")+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()+
+  labs(title = "Results of Otis Closure Test", subtitle = "Significance Level of 0.05", x = "Per minute detection probability", y ="p Otis")
+```
+
 
 ## CJS
 
@@ -230,7 +235,7 @@ Curious about how my estimates of p differ from the true values
 
 ```{r}
 dfClosure_CJS%>%
-  filter(N==20 & maxMinute == 10 & paramSimple == "p")
+  filter(N==20 & maxMinute == 10)
 ```
 
 
@@ -296,74 +301,74 @@ dfClosure_CJS%>%
 
 ### Closure Test
 
+
+- weird p values (ie id == 1_1)
+- weird chat (ie id == 8_476)
+- confirm how LRT is supposed to work D_S - D_L where S is a subset of L 
+- 1_1 vs 62_2 shows how the order of results isn't always that the unconstrained model appears second
+
 I used deviance to figure out what the p value should be. Theoretically I should be using c_hat to adjust, but for now I will keep it as it is. 
 
-First, test to make sure i calculated estimates and p value right
-```{r}
-dfMark = dfOriginalData%>%
-  filter(id == "1_1")
-dfMark = dfMark[,"ch"]
-strFormula = "~1"
-strFormula_phi = "~1"
-strModel = "CJS"
-pformula = list(formula = eval(parse_expr(strFormula)),share=TRUE)
-phiformula = list(formula = eval(parse_expr(strFormula_phi)))
-scenarioSimNum=2
-model_no_restriction = mark(dfMark, model = strModel, model.parameters = list(Phi = phiformula, p=pformula),prefix=scenarioSimNum,delete=TRUE,output=FALSE,model.name="cjs_unconstrain")
-model_no_restriction$results$real
-```
 
-unrestrained model
-```{r}
-strFormula = "~1"
-strFormula_phi = "~1"
-strModel = "CJS"
-pformula = list(formula = eval(parse_expr(strFormula)),share=TRUE)
-phiformula = list(formula = eval(parse_expr(strFormula_phi)),fixed=1)
-scenarioSimNum=2
-model_restriction = mark(dfMark, model = strModel, model.parameters = list(Phi = phiformula, p=pformula),prefix=scenarioSimNum,delete=TRUE,output=FALSE,model.name="cjs_constrain")
-model_restriction$results$real
-```
-
-```{r}
-# local results
-all_cjs_models = collect.models(type = "CJS")
-all_cjs_models$model.table
-
-
-dfClosure_CJS%>%
-  filter(id == "1_1")
-```
-
-
-This is interesting... I would expect that when alpha = 0 there should be no rejections of closure. Will investigate this case first
 ```{r}
 dfClosure_CJS%>%
-  filter(N == 20 & maxMinute == 10 & !duplicated(id))%>%
+  filter(N == 20 & maxMinute == 10 & !duplicated(id) & p_CJS !=1)%>%
 ggplot()+ 
   geom_boxplot(aes(x= as.factor(p_1m), y = p_CJS, color = as.factor(alpha)))+ 
    geom_hline(aes(yintercept=0.05), color = "grey30")+
   scale_color_discrete(name="Alpha")+
-  theme_bw()
+  theme_bw()+
+  labs(title = "Results of LRT (Closed model vs CJS)", subtitle = "Significance level of 0.05", x = "Per minute detection probability", y = "p LRT")
 ```
 
 
-#### Alpha = 0
-
-Investigate this because when alpha = 0 we should not be rejecting closure
 ```{r}
-dfAlpha_0 = dfClosure_CJS%>%
-  filter(alpha ==0 & p_CJS< 0.05 )%>%
-  arrange(p_CJS)
-
-dfAlpha_0
+dfClosure_CJS%>%
+  filter(N == 20 & maxMinute == 10 & !duplicated(id) )%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = p_CJS, color = as.factor(alpha)))+ 
+   geom_hline(aes(yintercept=0.05), color = "grey30")+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()+
+  labs(title = "Results of LRT (Closed model vs CJS)", subtitle = "Significance level of 0.05", x = "Per minute detection probability", y = "p LRT")
 ```
 
 
-Let's look @ the first case of id 51_434
+
+```{r}
+dfClosure_CJS$pExactOne = ifelse(dfClosure_CJS$p_CJS == 1, 1, 0)
+nTotal = nrow(filter(dfClosure_CJS, N == 20 & maxMinute == 10 & !duplicated(id)))
+dfClosure_CJS%>%
+  filter(N == 20 & maxMinute == 10 & !duplicated(id))%>%
+  summarise(nOne = sum(pExactOne)/nTotal)
+
+dfClosure_Grouped = dfClosure_CJS%>%
+   filter(N == 20 & maxMinute == 10 & !duplicated(id))%>%
+  group_by(p_1m,alpha)%>%
+  summarise(pExactOne = n())
+
+dfClosure_CJS%>%
+  filter(N == 20 & maxMinute == 10 & !duplicated(id))%>%
+  group_by(p_1m,alpha)%>%
+  summarise(percentPvalOne = sum(pExactOne)/1000)
+```
+
+
+#### Alpha = 0.05
+
+```{r}
+dfClosure_CJS%>%
+  filter(N == 20 & maxMinute == 10 & !duplicated(id) & alpha==0.05 & p_1m==0.1 & p_CJS > 0.05)%>%
+  arrange(desc(p_CJS))
+
+```
+
+
+
+Let's look @ the first case of id 62_1,62_6
 ```{r}
 dfOriginalData%>%
-  filter(id == "51_434")
+  filter(id == "62_6")
 ```
 
 First check that everything was fit properly
@@ -371,7 +376,7 @@ First check that everything was fit properly
 unrestrained model
 ```{r}
 dfMark = dfOriginalData%>%
-  filter(id == "51_434")
+  filter(id == "62_6")
 dfMark = dfMark[,"ch"]
 strFormula = "~1"
 strFormula_phi = "~1"
@@ -383,7 +388,7 @@ model_no_restriction = mark(dfMark, model = strModel, model.parameters = list(Ph
 model_no_restriction$results$real
 ```
 
-The chat of this model is *much* larger than 1 - so it
+In this case we can see that the estimate of p is actually better when the population is closed - so makes sense that we fail to reject closure.
 ```{r}
 strFormula = "~1"
 strFormula_phi = "~1"
@@ -395,24 +400,16 @@ model_restriction = mark(dfMark, model = strModel, model.parameters = list(Phi =
 model_restriction$results$real
 ```
 
-
 ```{r}
-model_no_restriction$results$lnl
-model_restriction$results$lnl
-
 all_cjs_models = collect.models(type = "CJS")
 all_cjs_models$model.table
 
 dfClosure_CJS%>%
-  filter(id == "51_434")
-```
-AICc would say pick the unconstrained model...
-
-```{r}
-pchisq(24.12429-38.71253,1,lower.tail=FALSE)
+  filter(id == "62_6")
 ```
 
-Try with chat..lol. Is it just that my data for this case is too sparse???
+
+
 
 TEST2 : So, TEST2 asks ‘of those marked animals not seen at (i+1), but known to be alive at (i+1) (since they
 were captured after i+1), does when they were next seen (i+2, i+3...) depend on whether or not they were
@@ -430,43 +427,14 @@ So, in a very loose sense, TEST 2 deals with ‘recapture problems’, while TES
 Interesting because 51_434, 8_476, etc will give c hat values of 0. Maybe I can write a function to calculate the chat and if it gives 0 I can remove those data points? I still don't understand what is causing these issues, so verify w Dr. Bonner
 
 ```{r}
-dfMark = dfOriginalData%>%
-  filter(id == "8_476")
-dfMark = dfMark[,"ch"]
-dfMark
+#dfMark = dfOriginalData%>%
+#  filter(id == "62_1")
+#dfMark = dfMark[,"ch"]
 
-dfMark_processed =process.data(dfMark,model="CJS")
-dfMark_RELEASE = release.gof(dfMark_processed)
-dfMark_RELEASE
-chat = dfMark_RELEASE[3,"Chi.square"]/dfMark_RELEASE[3,"df"]
+#dfMark_processed =process.data(dfMark,model="CJS")
+#dfMark_RELEASE = release.gof(dfMark_processed)
+#dfMark_RELEASE
+#chat = dfMark_RELEASE[3,"Chi.square"]/dfMark_RELEASE[3,"df"]
 ```
-
-Do I need to remove all individuals encountered only once?? Since the CJS is dependent on being recaptured at least once....
-```{r}
-dfMark = dfOriginalData%>%
-  filter(id == "8_476" & counts >1)
-dfMark = dfMark[,"ch"]
-dfMark
-
-dfMark_processed =process.data(dfMark,model="CJS")
-dfMark_RELEASE = release.gof(dfMark_processed)
-dfMark_RELEASE
-chat = dfMark_RELEASE[3,"Chi.square"]/dfMark_RELEASE[3,"df"]
-```
-
-
-
-```{r}
-# i could do this but it will actually take forever and ruin my computer
-# dfChat = dfOriginalData%>%
-#   group_by(id)%>%
-#   group_modify(~testGOF_RELEASE(.x))
-```
-
-### Analysis with AIC
-
-Ok so I will bite the bullet and use AIC instead
-
-
 
 
