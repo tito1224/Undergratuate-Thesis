@@ -75,11 +75,13 @@ params$Scenario = 1:nrow(params)
 dfClosure_CJS$combinationNumber = as.integer(str_split_fixed(dfClosure_CJS$id, "_",2)[,1])
 dfClosure_CJS = left_join(dfClosure_CJS,params,by=c("combinationNumber"="Scenario")) 
 dfClosure_CJS$paramSimple= ifelse(grepl('Phi', dfClosure_CJS$param)==TRUE, "phi","p")
+dfClosure_CJS$pExactOne = ifelse(dfClosure_CJS$p_CJS == 1, 1, 0)
 head(dfClosure_CJS)
 ```
 
 
 ## Load Otis Results
+
 ```{r}
 dfOriginalData = loadData()
 ```
@@ -89,19 +91,101 @@ Compute Otis test statistics
 dfOtisTest = otisDetectClosure(dfOriginalData)
 ```
 
+There are times when p_k_Otis is nan because the varqi = 0 -> this is due to the fact that the individual is captured at each capture occasion
+```{r}
+dfOtisTest %>%
+  filter(is.na(p_k_Otis))
+```
+
+
+
+```{r}
+setwd("./DigitalAllianceOutput/Huggins")
+dataFinalTrial = list.files(pattern = ".rds") # load rds files
+dataFinalTrial = mixedsort(dataFinalTrial)%>% # use mixedsort so it appears in ascending order 
+  map(readRDS)
+
+# initialize empty dataframes to store the data
+dfEstimatesFinalH = data.frame()
+#counter = 1
+
+# loop through the rds files and retrive data 
+for (item in dataFinalTrial){
+  tempCalculations = item[[2]] # load estimates for each run (should be 200,000 rows - 100,000 estimates of N, and 100,000 estimates of p)
+  
+  # add data points to final dataframe
+  dfEstimatesFinalH = rbind(dfEstimatesFinalH, tempCalculations)
+}
+
+dfEstimatesFinalH$id = paste0(dfEstimatesFinalH$combinationNumber,"_",dfEstimatesFinalH$simulationNumber)
+# this code is what was used in the ./Functions/runSimulation.R file to generate scenarios to input into the HPC 
+nRuns = 1000
+lstNi = c(10,20)
+lstP = c(0.1,0.2,0.3,0.4,0.5)
+#lstAlpha = c(0)
+lstAlpha =c(0,0.05,0.1,0.2,0.3)
+lstMaxMin = c(5,10)
+lstFormula = c("~1")
+lstMixtures = c(1)
+lstSeed = c("NULL")
+strModel = "Huggins"
+
+params = expand.grid(nRuns,lstNi,lstP, lstAlpha, lstMaxMin,lstFormula,lstMixtures,lstSeed,strModel)
+colnames(params) = c("nRuns","N","p_1m","alpha","maxMinute","strFormula","lstMixtures","lstSeed","strModel")
+params$Scenario = 1:nrow(params)
+
+# merge the params dataframe with the dataframe of estimates to help with calculating summary statistics 
+dfEstimatesFinalH = left_join(dfEstimatesFinalH,params,by=c("combinationNumber"="Scenario")) 
+
+# some code to help with calculating summary statistics -> full summary not done yet, but these are intermediate steps needed 
+# to determine things like coverage probability, MSE, etc
+dfEstimatesFinalH$bCoverage = ifelse(dfEstimatesFinalH$trueValue >= dfEstimatesFinalH$lcl & dfEstimatesFinalH$trueValue <= dfEstimatesFinalH$ucl,1,0)
+dfEstimatesFinalH$squaredError = (dfEstimatesFinalH$estimate - dfEstimatesFinalH$trueValues)^2
+dfEstimatesFinalH$width = dfEstimatesFinalH$ucl - dfEstimatesFinalH$lcl
+```
+### Clean Estimates 
+
+Filter out all cases where individuals were detected only once. 
+
+```{r}
+dfMultDetect = dfOriginalData %>%
+  filter(counts>1)
+
+dfSingleDetection = dfOriginalData %>%
+  filter(counts==1 & !(id %in% dfMultDetect$id))
+
+dfEstimatesProbability = dfEstimatesFinalH %>% # these are probability estimates;
+  filter(variable == "p g1 t1") %>%
+  filter(estimate>=0) %>%
+  filter(!(id %in% dfSingleDetection$id))
+
+lstBadID = unique(dfOriginalData[which(!(dfOriginalData$id %in% dfEstimatesProbability$id)),]$id)
+
+dfOtisTest = dfOtisTest%>%
+  filter(!(id %in% lstBadID))
+
+dfClosure_CJS = dfClosure_CJS%>%
+  filter(!(id%in% lstBadID))
+```
 
 ## Combine Test Results
 
 ```{r}
 dfClosure_CJS_Summary = dfClosure_CJS%>%
-  select(id, p_CJS)%>%
-  filter(!duplicated(id))
+  filter(paramSimple == "p")%>%
+  select(id, p_CJS,CJS_estimate,bConstrained)
 
 dfOtisTest_Summary = dfOtisTest%>%
   select(id, N,p_1m,alpha,maxMinute,pOverall_Otis)%>%
   filter(!duplicated(id))
 
-dfClosure = left_join(dfOtisTest_Summary,dfClosure_CJS_Summary,by="id")
+
+dfEstimatesProbability = dfEstimatesProbability%>%
+  rename(HugginsEstimate = estimate)
+
+dfClosure = left_join(dfClosure_CJS_Summary,dfOtisTest_Summary,by="id")
+dfClosure =left_join(dfClosure, dfEstimatesProbability[,c("id","HugginsEstimate","se","bCoverage","squaredError","width","lcl","ucl")])
+dfClosure$combinationNumber = as.integer(str_split_fixed(dfClosure$id, "_",2)[,1])
 head(dfClosure)
 ```
 
@@ -112,16 +196,9 @@ head(dfClosure)
 
 ### Wait Time (Qi)
 
-Not that informative when maxMin = 5. But overall same pattern
+Not that informative when maxMin = 5. But overall same pattern. We see that when alpha is large, the median wait time is considerably lower. Exploratory analysis indicates that using wait time as metric to detect closure is indeed a good idea. 
 ```{r}
 # if qi <0 it means there was only one detection
-dfOtisTest%>%
-  filter(N == 20 & maxMinute == 5)%>%
-ggplot()+ 
-  geom_boxplot(aes(x= as.factor(p_1m), y = qi, color = as.factor(alpha)))+ 
-  #facet_wrap(~maxMinute)+
-  scale_color_discrete(name="Alpha")+
-  theme_bw()
 
 dfOtisTest%>%
   filter(N == 20 & maxMinute == 10)%>%
@@ -129,7 +206,8 @@ ggplot()+
   geom_boxplot(aes(x= as.factor(p_1m), y = qi, color = as.factor(alpha)))+ 
   #facet_wrap(~maxMinute)+
   scale_color_discrete(name="Alpha")+
-  theme_bw()
+  theme_bw()+
+  labs(title = "Distribution of Time Between First and Last Detection",subtitle="N = 20; 10 capture occasions." ,x = "Per minute detection probability", y = "Waiting Time")
 ```
 
 
@@ -139,58 +217,47 @@ ggplot()+
 Now I will look at the distribution of the p values associated with the test statistic C_k across various scenarios. 
 
 
-When N = 10 and only five capture occasions, Otis test does not reject closure on average. Note that low population and low capture occasion means that we use only 1-2 individuals to calculate the conditional test statistic - this does not seem to be a good idea.  
+When N = 20 and only five capture occasions, Otis test does not reject closure on average. Note that low population and/or low capture occasion means that we use only 1-2 individuals to calculate the conditional test statistic - this does not seem to be a good idea.  
 ```{r}
 dfOtisTest%>%
-  filter(N == 10 & maxMinute == 5)%>%
-ggplot()+ 
-  geom_boxplot(aes(x= as.factor(p_1m), y = p_k_Otis, color = as.factor(alpha)))+ 
-  geom_hline(aes(yintercept=0.05), color = "grey30")+
-  scale_color_discrete(name="Alpha")+
-  theme_bw()
-
-dfOtisTest%>%
-  filter(N == 10 & maxMinute == 10)%>%
+  filter(N == 20 & maxMinute == 5)%>%
+  distinct(id,counts,.keep_all = TRUE)%>%
 ggplot()+ 
   geom_boxplot(aes(x= as.factor(p_1m), y = p_k_Otis, color = as.factor(alpha)))+ 
    geom_hline(aes(yintercept=0.05), color = "grey30")+
   scale_color_discrete(name="Alpha")+
+  labs(title ="Results of Conditional Hypothesis Test", subtitle = "N = 20; 5 capture occasions.",x="Per minute detetion probability", y = "p_k")+
+  theme_bw()
+
+dfOtisTest%>%
+  filter(N == 20 & maxMinute == 10)%>%
+  distinct(id,counts,.keep_all = TRUE)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = p_k_Otis, color = as.factor(alpha)))+ 
+   geom_hline(aes(yintercept=0.05), color = "grey30")+
+  scale_color_discrete(name="Alpha")+
+  labs(title ="Results of Conditional Hypothesis Test", subtitle = "N = 20; 10 capture occasions.",x="Per minute detetion probability", y = "p_k")+
   theme_bw()
 ```
 
 
-I think its weird that the case of p_1m = 0.1 isn't producing lower p values - esp when alpha = 0.3. Esp given that N = 20 and maxMin = 10. Check the data for some of these
-
 ```{r}
-# alpha = 0.3 and p_1m = 0.1 and maxMin = 10 and N = 20 is scenario 92
-
-dfOtisTest%>%
-  filter(combinationNumber==92)%>%
-  arrange(desc(p_k_Otis))%>%
-  head(10)%>%
-  select(id, fk, counts, p_k_Otis, Ck)
-```
-
-has a super long wait time - makes sense that it wasn't rejected...
-```{r}
-dfOtisTest%>%
-  filter(id == "92_344")
+unique(dfOtisTest$counts)
 ```
 
 
-The issue with the p_k_Otis value is that this is all based on only 3 or 4 individuals which is not great and feels like it is subject to a lot of variability. 
 
-
-you can see that in cases where there are a lot of actual splits in the data, the p val is low (ie 92_897)
-
-when maxmin is five we rarely ever reject... probs because the Eqi is incredibly low.
+The issue with the p_k_Otis value is that this is all based on only 3 or 4 individuals which is not great and feels like it is subject to a lot of variability. We can see there are circumstances where it fails to reject closure (even though it should) because not enough individuals are detected > 1 times. 
 
 ```{r}
-dfOriginalData%>%
-  filter(id== "92_897")
 dfOtisTest%>%
-  filter(id=="92_897")%>%
-  select(id, fk, counts, p_k_Otis, Ck)
+  filter(N ==20 & maxMinute == 10 & alpha == 0.1 & p_1m == 0.3)%>%
+  group_by(N,p_1m, alpha,maxMinute,id,counts,p_k_Otis)%>%
+  summarise(nIndividualsUsed = n())%>%
+  group_by(N,p_1m, alpha,maxMinute,counts)%>%
+  summarise(meanIndidivualsUsed= mean(nIndividualsUsed), 
+            medianPvalue = median(p_k_Otis),
+            meanPvalue = mean(p_k_Otis))
 ```
 
 
@@ -198,34 +265,258 @@ dfOtisTest%>%
 
 The smaller the test statistic C is, the more evidence against closure. Still requires a lot of evidence to reject the closure assumption - only when p = 0.3 or higher do we begin to see some reasonableness. But really p must equal 0.5 in order to actually reject closure @ the smallest alpha. Test is done right because when alpha = 0, closure is never rejected, even when p_1m is small.
 ```{r}
-dfOtisTest%>%
-  filter(N == 20 & maxMinute == 5)%>%
-ggplot()+ 
-  geom_boxplot(aes(x= as.factor(p_1m), y = C, color = as.factor(alpha)))+ 
-  geom_hline(yintercept = qnorm(0.05, lower.tail=TRUE),color = "grey20",size=0.8)+
-  scale_color_discrete(name="Alpha")+
-  theme_bw()
-
-dfOtisTest%>%
-  filter(N == 20 & maxMinute == 10)%>%
-ggplot()+ 
-  geom_boxplot(aes(x= as.factor(p_1m), y = C, color = as.factor(alpha)))+ 
-  geom_hline(yintercept = qnorm(0.05, lower.tail=TRUE),color = "grey20",size=0.8)+
-  scale_color_discrete(name="Alpha")+
-  theme_bw()
+# dfOtisTest%>%
+#   filter(N == 20 & maxMinute == 5)%>%
+# ggplot()+ 
+#   geom_boxplot(aes(x= as.factor(p_1m), y = C, color = as.factor(alpha)))+ 
+#   geom_hline(yintercept = qnorm(0.05, lower.tail=TRUE),color = "grey20",size=0.8)+
+#   scale_color_discrete(name="Alpha")+
+#   theme_bw()
+# 
+# dfOtisTest%>%
+#   filter(N == 20 & maxMinute == 10)%>%
+# ggplot()+ 
+#   geom_boxplot(aes(x= as.factor(p_1m), y = C, color = as.factor(alpha)))+ 
+#   geom_hline(yintercept = qnorm(0.05, lower.tail=TRUE),color = "grey20",size=0.8)+
+#   scale_color_discrete(name="Alpha")+
+#   theme_bw()
 ```
+
 
 ```{r}
 dfOtisTest%>%
   filter(N == 20 & maxMinute == 10)%>%
+  distinct(id,.keep_all = TRUE)%>%
 ggplot()+ 
   geom_boxplot(aes(x= as.factor(p_1m), y = pOverall_Otis, color = as.factor(alpha)))+ 
    geom_hline(aes(yintercept=0.05), color = "grey30")+
   scale_color_discrete(name="Alpha")+
   theme_bw()+
-  labs(title = "Results of Otis Closure Test", subtitle = "Significance Level of 0.05", x = "Per minute detection probability", y ="p Otis")
+  labs(title = "Results of Otis Closure Test", subtitle = "N=20; 10 capture occassions.", x = "Per minute detection probability", y ="p Otis")
 ```
 
+```{r}
+dfOtisTest%>%
+  filter(N == 20 & maxMinute == 5)%>%
+  distinct(id,.keep_all = TRUE)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = pOverall_Otis, color = as.factor(alpha)))+ 
+   geom_hline(aes(yintercept=0.05), color = "grey30")+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()+
+  labs(title = "Results of Otis Closure Test", subtitle = "N=20; 5 capture occassions.", x = "Per minute detection probability", y ="p Otis")
+```
+
+
+### Power of Otis Test
+
+A Type I error occurs if we reject the null hypothesis H0 (in favor of the alternative hypothesis HA) when the null hypothesis is true. We denote alpha = probability of Type 1 error 
+
+A Type II error occurs if we fail to reject the null hypothesis when the alternative hypothesis is true. We denote B = probability of type 2 error.
+
+The power of a hypothesis test is the probability of making the correct decision if the alternative hypothesis is true. That is, the power of a hypothesis test is the probability of rejecting the null hypothesis H0 when the alternative hypothesis is is the hypothesis that is true
+
+```{r}
+dfOtisTest_Power = dfOtisTest%>%
+  mutate(Type_k = case_when(
+    p_k_Otis < 0.05 & alpha == 0 ~ "Type 1",
+    p_k_Otis > 0.05 & alpha != 0 ~ "Type 2",
+    p_k_Otis < 0.05 & alpha !=0 ~ "Power",
+    p_k_Otis > 0.05 & alpha == 0 ~ "True"
+  )
+         )
+
+
+dfOtisTest_Power = dfOtisTest_Power%>%
+  mutate(Type = case_when(
+    pOverall_Otis < 0.05 & alpha == 0 ~ "Type 1",
+    pOverall_Otis > 0.05 & alpha != 0 ~ "Type 2",
+    pOverall_Otis < 0.05 & alpha !=0 ~ "Power",
+    pOverall_Otis > 0.05 & alpha == 0 ~ "True"
+  )
+         )
+```
+
+
+Trying to find power by id won't work based on what I'm seeing here.
+```{r}
+dfOtisTest_Power%>%
+  group_by(N,p_1m,alpha,maxMinute,id,Type_k)%>%
+  summarise(n())%>%
+  ungroup()
+```
+
+Makes sense to do it by combination number I believe. Graph verifies that not a single case was rejected for combination number 1.
+```{r}
+dfOtisTest_Rate = dfOtisTest_Power%>%
+  distinct(id,counts,.keep_all = TRUE)%>%
+  group_by(combinationNumber)%>%
+  mutate(totalCases = n())%>%
+  group_by(N,p_1m,alpha,maxMinute,combinationNumber,totalCases,Type_k)%>%
+  summarise(nType=n())%>%
+  ungroup()%>%
+  mutate(Percent=round(nType/totalCases*100,2))
+dfOtisTest_Rate
+```
+
+
+
+```{r}
+dfOtisTest%>%
+  filter(N == 10 & maxMinute == 5)%>%
+  distinct(id,counts,.keep_all = TRUE)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = p_k_Otis, color = as.factor(alpha)))+ 
+   geom_hline(aes(yintercept=0.05), color = "grey30")+
+  scale_color_discrete(name="Alpha")+
+  labs(title ="Results of Conditional Hypothesis Test", subtitle = "N = 10; 5 capture occasions.",x="Per minute detetion probability", y = "p_k")+
+  theme_bw()
+```
+
+Type 1 error stays largely within the bounds of the significance level. Max power is only slightly higher than 75% even when detection probability is high. 
+```{r}
+dfOtisTest_Rate%>%
+  filter(N == 20 & maxMinute == 10 & !is.na(Type_k) & Type_k != "True")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percent, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percent, color = as.factor(alpha)))+
+  geom_hline(aes(yintercept=5,linetype="5 %"),color="black")+
+  scale_linetype_manual(name = "Significance level", values = c(5), 
+                      guide = guide_legend(override.aes = list(color = c("black"))))+
+  facet_wrap(~Type_k)+
+  theme_bw()+
+  labs(title = "Error Rates Across Scenarios", subtitle = "N = 20; 10 capture occasions")+
+  scale_color_discrete(name="Alpha")
+```
+
+
+We can see that less capture occasions means lower power - and more occurrence of Type 2 errors.
+```{r}
+dfOtisTest_Rate%>%
+  filter(N == 20 & maxMinute == 5 & !is.na(Type_k) & Type_k != "True")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percent, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percent, color = as.factor(alpha)))+
+ geom_hline(aes(yintercept=5,linetype="5 %"),color="black")+
+  scale_linetype_manual(name = "Significance level", values = c(5), 
+                      guide = guide_legend(override.aes = list(color = c("black"))))+
+   scale_color_discrete(name="Alpha")+
+  facet_wrap(~Type_k)+
+  theme_bw()+
+  labs(title = "Error Rates Across Scenarios", subtitle = "N = 20; 5 capture occasions")
+```
+
+I could try and do an overall power test for the conditional C_k test
+```{r}
+dfOtisTest_Power%>%
+  distinct(id,counts,.keep_all = TRUE)%>%
+  group_by(Type_k)%>%
+  summarise(nType=n())%>%
+  ungroup()%>%
+  mutate(Percent = round(nType/sum(nType)*100,2))%>%
+  filter(Type_k %in% c("Power","Type 1","Type 2"))
+  
+```
+
+
+testing that numbers make sense
+```{r}
+#  dftest = dfOtisTest_Power%>%
+#   distinct(id,counts,.keep_all = TRUE)%>%
+#   filter(combinationNumber == 51)%>%
+#   select(id,counts,combinationNumber)%>%
+#   group_by(counts)%>%
+#   summarise(vals = n())
+# dftest
+# sum(dftest$vals)
+
+```
+
+
+Now let's do the same for the pOverall values
+```{r}
+dfOtisTest_Rate_Overall = dfOtisTest_Power%>%
+  distinct(id,.keep_all = TRUE)%>%
+  group_by(combinationNumber)%>%
+  mutate(totalCases = n())%>%
+  group_by(N,p_1m,alpha,maxMinute,combinationNumber,totalCases,Type)%>%
+  summarise(nType=n())%>%
+  ungroup()%>%
+  mutate(Percent_Overall=round(nType/totalCases*100,2))
+dfOtisTest_Rate_Overall
+```
+
+```{r}
+dfOtisTest_Rate_Overall%>%
+  filter(N == 20 & maxMinute == 10 & !is.na(Type) & Type != "True")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percent_Overall, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percent_Overall, color = as.factor(alpha)))+
+  geom_hline(aes(yintercept=5,linetype="5 %"),color="black")+
+  scale_linetype_manual(name = "Significance level", values = c(5), 
+                      guide = guide_legend(override.aes = list(color = c("black"))))+
+   scale_color_discrete(name="Alpha")+
+  facet_wrap(~Type)+
+  theme_bw()+
+  labs(title = "Error Rates Across Scenarios With General Otis Test", subtitle = "N = 20; 10 capture occasions",x="Per minute detection probability",y="Percent")
+```
+
+```{r}
+dfOtisTest_Rate_Overall%>%
+  filter(N == 20 & maxMinute == 5 & !is.na(Type) & Type != "True")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percent_Overall, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percent_Overall, color = as.factor(alpha)))+
+  geom_hline(aes(yintercept=5,linetype="5 %"),color="black")+
+  scale_linetype_manual(name = "Significance level", values = c(5), 
+                      guide = guide_legend(override.aes = list(color = c("black"))))+
+   scale_color_discrete(name="Alpha")+
+  facet_wrap(~Type)+
+  theme_bw()+
+  labs(title = "Error Rates Across Scenarios with General Otis Test", subtitle = "N = 20; 5 capture occasions")
+```
+
+Even when the population is low, the power of the test is very strong as long as we have 10 capture occasions. So # of capture occasions affects power of the test more than the population size. 
+```{r}
+dfOtisTest_Rate_Overall%>%
+  filter(N == 10 & maxMinute == 10 & !is.na(Type) & Type != "True")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percent_Overall, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percent_Overall, color = as.factor(alpha)))+
+  geom_hline(aes(yintercept=5,linetype="5 %"),color="black")+
+  scale_linetype_manual(name = "Significance level", values = c(5), 
+                      guide = guide_legend(override.aes = list(color = c("black"))))+
+   scale_color_discrete(name="Alpha")+
+  facet_wrap(~Type)+
+  theme_bw()+
+  labs(title = "Error Rates Across Scenarios", subtitle = "N = 10; 10 capture occasions",x="Per minute detection probability",y="Rate")
+```
+
+
+
+```{r}
+dfPowerOtisCombined= left_join(dfOtisTest_Rate, dfOtisTest_Rate_Overall[,c("combinationNumber","Type","Percent_Overall")], by= c("combinationNumber","Type_k"="Type"))%>%
+  rename("Conditional Test"="Percent",
+         "Full Test" = "Percent_Overall")
+```
+
+```{r}
+head(dfPowerOtisCombined)
+```
+
+Side by side comparison shows that the overall test is stronger
+```{r}
+dfPowerOtisCombined%>%
+  pivot_longer(cols= c("Conditional Test","Full Test"), names_to = "ModelType", values_to ="Percentages")%>%
+  filter(N == 20 & maxMinute == 10 & !is.na(Type_k) & Type_k == "Power")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  facet_wrap(~ModelType)+
+  theme_bw()+
+  labs(title = "Power Across Scenarios", subtitle = "N = 20; 10 capture occasions",x="Per minute detection probability")+
+   scale_color_discrete(name="Alpha")
+```
 
 ## CJS
 
@@ -241,41 +532,30 @@ dfClosure_CJS%>%
 
 ```{r}
 dfClosure_CJS_Estimate= dfClosure_CJS%>%
-  filter(N==20 & maxMinute == 10 & paramSimple=="p")
+  filter(N==20 & maxMinute == 10 & paramSimple=="p")%>%
+  mutate(bConstrained=if_else(bConstrained == 0,"Unconstrained","Constrained"))
 
 ggplot(dfClosure_CJS_Estimate)+ 
   geom_boxplot(aes(x=as.factor(p_1m), y = CJS_estimate, color = as.factor(alpha)))+ 
   facet_wrap(~bConstrained)+
-  theme_bw()
+  theme_bw()+
+  labs(title = "Estimates of Per Minute Detection Probability",subtitle = "N = 20;10 capture occassions.",x="Per minute detection probability",y="Estimate")+
+  scale_color_discrete(name="Alpha")
 ```
 
-
-Median estimates vs the true value 
-```{r}
-dfClosure_CJS_Estimate%>%
-  filter(paramSimple=="p" & N==20 & maxMinute == 10)%>%
-  group_by(p_1m,alpha,N,maxMinute,bConstrained)%>%
-  summarise(median = median(CJS_estimate))%>%
-  ggplot()+ 
-  geom_point(aes(x=alpha,y=median, color = as.factor(p_1m) ))+
-  geom_line(aes(x=alpha,y=p_1m, color= as.factor(p_1m)))+
-  facet_wrap(~bConstrained)+
-  theme_bw()+
-  labs(subtitle = "Horizontal line represents true per minute detection probability")
-```
-
+Compare estimates from constrained model to Huggin's estimates. 
 
 ```{r}
-dfClosure_CJS_Estimate%>%
-  filter(paramSimple=="p" & N==20 & maxMinute == 10)%>%
-  group_by(p_1m,alpha,N,maxMinute,bConstrained)%>%
-  summarise(median = median(CJS_estimate))%>%
+dfClosure %>%
+  filter(bConstrained == 1 & N == 20 & maxMinute == 10)%>%
+  pivot_longer(cols = c("CJS_estimate","HugginsEstimate"), names_to = "ModelType", values_to = "pEstimate")%>%
+  mutate(ModelType= ifelse(ModelType == "CJS_estimate","CJS","Huggins"))%>%
   ggplot()+ 
-  geom_point(aes(x=p_1m,y=median, color = as.factor(alpha) ))+
-  geom_line(aes(x=p_1m,y=p_1m, color= as.factor(alpha)))+
-  facet_wrap(~bConstrained)+
+  geom_boxplot(aes(x=as.factor(p_1m), y = pEstimate, color = as.factor(alpha)))+ 
+  facet_wrap(~ModelType)+
   theme_bw()+
-  labs(subtitle = "Horizontal line represents true per minute detection probability")
+  scale_color_discrete(name = "Alpha")+
+  labs(title = "Estimates of Detection Probability Across Scenarios",subtitle = "N = 20; 10 capture occasions",x="Per minute detection probability", y = "Estimate")
 ```
 
 
@@ -287,7 +567,9 @@ dfClosure_CJS%>%
   mutate(alphaHat = 1-CJS_estimate)%>%
 ggplot()+ 
   geom_boxplot(aes(x=as.factor(p_1m), y = alphaHat, color = as.factor(alpha)))+ 
-  theme_bw()
+  theme_bw()+
+  scale_color_discrete(name = "Alpha")+
+  labs(title = "Estimates of Movement Probability Across Scenarios",subtitle = "N = 20; 10 capture occasions",x="Per minute detection probability", y = "Estimate")
 ```
 
 ```{r}
@@ -297,6 +579,302 @@ dfClosure_CJS%>%
   summarise(median = median(1-CJS_estimate))
 ```
 
+
+Summary stats to look at
+
+```{r}
+head(dfClosure)
+```
+
+Start with Huggins summary stats
+```{r}
+dfSummaryStatsH = dfClosure %>%
+  distinct(id,.keep_all = TRUE)%>%
+    group_by(p_1m,alpha,N,maxMinute,combinationNumber)%>%
+    summarise(AvgPhat = mean(HugginsEstimate,na.rm=TRUE),
+              medianPhat= median(HugginsEstimate,na.rm=TRUE),
+              AvgPhatSE= mean(se,na.rm=TRUE),
+              sdPhat = sd(HugginsEstimate,na.rm=TRUE),
+              biasPhat = AvgPhat - p_1m,
+              mse = mean(squaredError,na.rm=TRUE),
+              bias_SE_Phat = AvgPhatSE - sdPhat,
+              coverage = sum(bCoverage,na.rm=TRUE)/sum(!is.na(HugginsEstimate)), # changed this from n() to sum(!is.na()) because I have some NA values for my estimates
+              avgWidth = mean(width,na.rm=TRUE),
+              relPhatBias = round(biasPhat/p_1m*100,2),
+              modelType = "Huggins",
+              avgUCL= mean(ucl,na.rm=TRUE),
+              avgLCL = mean(lcl, na.rm=TRUE),
+              AvgPhatVar= mean(se^2,na.rm=TRUE))
+dfSummaryStatsH = dfSummaryStatsH[!duplicated(dfSummaryStatsH),]
+dfSummaryStatsH%>%
+  arrange(combinationNumber)%>%
+  select(p_1m,alpha,N,maxMinute,combinationNumber,AvgPhat,mse,AvgPhatSE,relPhatBias,coverage)
+```
+
+Summary stats for unconstrained model
+```{r}
+dfSummaryStatsC =dfClosure_CJS%>%
+  filter(paramSimple=="p"& bConstrained == 1)
+dfSummaryStatsC$bCoverage = ifelse(dfSummaryStatsC$p_1m >= dfSummaryStatsC$lcl & dfSummaryStatsC$p_1m <= dfSummaryStatsC$ucl,1,0)
+dfSummaryStatsC$squaredError = (dfSummaryStatsC$CJS_estimate - dfSummaryStatsC$p_1m)^2
+dfSummaryStatsC$width = dfSummaryStatsC$ucl - dfSummaryStatsC$lcl
+
+dfSummaryStatsC = dfSummaryStatsC %>%
+  distinct(id,.keep_all = TRUE)%>%
+    group_by(p_1m,alpha,N,maxMinute,combinationNumber)%>%
+    summarise(AvgPhat = mean(CJS_estimate,na.rm=TRUE),
+              medianPhat= median(CJS_estimate,na.rm=TRUE),
+              AvgPhatSE= mean(se,na.rm=TRUE),
+              sdPhat = sd(CJS_estimate,na.rm=TRUE),
+              biasPhat = AvgPhat - p_1m,
+              mse = mean(squaredError,na.rm=TRUE),
+              bias_SE_Phat = AvgPhatSE - sdPhat,
+              coverage = sum(bCoverage,na.rm=TRUE)/sum(!is.na(CJS_estimate)), # changed this from n() to sum(!is.na()) because I have some NA values for my estimates
+              avgWidth = mean(width,na.rm=TRUE),
+              relPhatBias = round(biasPhat/p_1m*100,2),
+              modelType = "CJS Constrained",
+              avgUCL= mean(ucl,na.rm=TRUE),
+              avgLCL = mean(lcl, na.rm=TRUE),
+              AvgPhatVar= mean(se^2,na.rm=TRUE))
+dfSummaryStatsC = dfSummaryStatsC[!duplicated(dfSummaryStatsC),]
+dfSummaryStatsC%>%
+  arrange(combinationNumber)%>%
+  select(p_1m,alpha,N,maxMinute,combinationNumber,AvgPhat,mse,AvgPhatSE,relPhatBias,coverage)
+
+
+```
+
+Summary stats for unconstrained model 
+
+Avg p hat values are significantly biased - esp when alpha is low...
+```{r}
+dfSummaryStatsU =dfClosure_CJS%>%
+  filter(paramSimple=="p"& bConstrained == 0)
+dfSummaryStatsU$bCoverage = ifelse(dfSummaryStatsU$p_1m >= dfSummaryStatsU$lcl & dfSummaryStatsU$p_1m <= dfSummaryStatsU$ucl,1,0)
+dfSummaryStatsU$squaredError = (dfSummaryStatsU$CJS_estimate - dfSummaryStatsU$p_1m)^2
+dfSummaryStatsU$width = dfSummaryStatsU$ucl - dfSummaryStatsU$lcl
+
+dfSummaryStatsU = dfSummaryStatsU %>%
+  distinct(id,.keep_all = TRUE)%>%
+    group_by(p_1m,alpha,N,maxMinute,combinationNumber)%>%
+    summarise(AvgPhat = mean(CJS_estimate,na.rm=TRUE),
+              medianPhat= median(CJS_estimate,na.rm=TRUE),
+              AvgPhatSE= mean(se,na.rm=TRUE),
+              sdPhat = sd(CJS_estimate,na.rm=TRUE),
+              biasPhat = AvgPhat - p_1m,
+              mse = mean(squaredError,na.rm=TRUE),
+              bias_SE_Phat = AvgPhatSE - sdPhat,
+              coverage = sum(bCoverage,na.rm=TRUE)/sum(!is.na(CJS_estimate)), # changed this from n() to sum(!is.na()) because I have some NA values for my estimates
+              avgWidth = mean(width,na.rm=TRUE),
+              relPhatBias = round(biasPhat/p_1m*100,2),
+              modelType = "CJS Unconstrained",
+              avgUCL= mean(ucl,na.rm=TRUE),
+              avgLCL = mean(lcl, na.rm=TRUE),
+              AvgPhatVar= mean(se^2,na.rm=TRUE))
+dfSummaryStatsU = dfSummaryStatsU[!duplicated(dfSummaryStatsU),]
+dfSummaryStatsU%>%
+  arrange(combinationNumber)%>%
+  select(p_1m,alpha,N,maxMinute,combinationNumber,AvgPhat,mse,AvgPhatSE,relPhatBias,coverage)
+
+```
+
+Lots of estimates of 1...
+```{r}
+dfClosure_CJS%>%
+  filter(paramSimple=="p"& bConstrained == 0 & combinationNumber == 1)
+
+dfClosure_CJS%>%
+  filter(id == "1_1")
+dfOriginalData%>%
+  filter(id == "1_1")
+```
+
+
+```{r}
+dfCompareEstimates = rbind(dfSummaryStatsH, dfSummaryStatsC, dfSummaryStatsU)
+head(dfCompareEstimates)
+```
+
+CJS unconstrained model not the best when N is low and capture ocasions is low.
+
+Unconstrained model is horrible when capture occasions is 5... not sure why though
+so basically unconstrained model is great when we have high population & lots of movement, else its pretty bad - overestimates detection probability even when there is no movement.
+```{r}
+dfCompareEstimates %>%
+  filter(N==20 & maxMinute== 10)%>%
+ggplot(aes(x=p_1m, y = AvgPhat, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~modelType)+
+  theme_bw()+ 
+  labs(title  = "Average Probability Estimates", subtitle = "N = 20; 10 capture occcasions",x= "Per Minute Detection Probability",y = "Average Probability Estimate")+
+  scale_color_discrete(name = "Alpha")
+
+
+dfCompareEstimates %>%
+  filter(N==10 & maxMinute== 10)%>%
+ggplot(aes(x=p_1m, y = AvgPhat, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~modelType)+
+  theme_bw()+ 
+  labs(title  = "Average Probability Estimates", subtitle = "N = 10; 10 capture occcasions",x= "Per Minute Detection Probability",y = "Average Probability Estimate")+
+  scale_color_discrete(name = "Alpha")
+
+dfCompareEstimates %>%
+  filter(N==20 & maxMinute== 5)%>%
+ggplot(aes(x=p_1m, y = AvgPhat, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~modelType)+
+  theme_bw()+ 
+  labs(title  = "Average Probability Estimates", subtitle = "N = 20; 5 capture occcasions",x= "Per Minute Detection Probability",y = "Average Probability Estimate")+
+  scale_color_discrete(name = "Alpha")
+
+dfCompareEstimates %>%
+  filter(N==10 & maxMinute== 5)%>%
+ggplot(aes(x=p_1m, y = AvgPhat, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~modelType)+
+  theme_bw()+ 
+  labs(title  = "Average Probability Estimates", subtitle = "N = 10; 5 capture occcasions",x= "Per Minute Detection Probability",y = "Average Probability Estimate")+
+  scale_color_discrete(name = "Alpha")
+```
+
+
+Rel bias
+```{r}
+dfCompareEstimates %>%
+  filter(N==20 & maxMinute== 10)%>%
+ggplot(aes(x=p_1m, y = relPhatBias, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~modelType)+
+  theme_bw()+ 
+  labs(title  = "Relative Bias", subtitle = "N = 20; 10 capture occcasions",x= "Per Minute Detection Probability",y = "Bias")+
+  scale_color_discrete(name = "Alpha")
+
+
+dfCompareEstimates %>%
+  filter(N==10 & maxMinute== 10)%>%
+ggplot(aes(x=p_1m, y = relPhatBias, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~modelType)+
+  theme_bw()+ 
+  labs(title  = "Relative Bias", subtitle = "N = 10; 10 capture occcasions",x= "Per Minute Detection Probability",y = "Bias")+
+  scale_color_discrete(name = "Alpha")
+
+dfCompareEstimates %>%
+  filter(N==20 & maxMinute== 5)%>%
+ggplot(aes(x=p_1m, y = relPhatBias, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~modelType)+
+  theme_bw()+ 
+  labs(title  = "Relative Bias", subtitle = "N = 20; 5 capture occcasions",x= "Per Minute Detection Probability",y = "Bias")+
+  scale_color_discrete(name = "Alpha")
+
+dfCompareEstimates %>%
+  filter(N==10 & maxMinute== 5)%>%
+ggplot(aes(x=p_1m, y = relPhatBias, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~modelType)+
+  theme_bw()+ 
+  labs(title  = "Relative Bias", subtitle = "N = 10; 5 capture occcasions",x= "Per Minute Detection Probability",y = "Bias")+
+  scale_color_discrete(name = "Alpha")
+```
+
+SE
+```{r}
+dfCompareEstimates %>%
+  filter(N==20 & maxMinute== 10)%>%
+ggplot(aes(x=p_1m, y = AvgPhatSE, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~modelType)+
+  theme_bw()+ 
+  labs(title  = "Average Probability SE", subtitle = "N = 20; 10 capture occcasions",x= "Per Minute Detection Probability",y = "Average Probability SE")+
+  scale_color_discrete(name = "Alpha")
+
+
+dfCompareEstimates %>%
+  filter(N==10 & maxMinute== 10)%>%
+ggplot(aes(x=p_1m, y = AvgPhatSE, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~modelType)+
+  theme_bw()+ 
+  labs(title  = "Average Probability SE", subtitle = "N = 10; 10 capture occcasions",x= "Per Minute Detection Probability",y = "Average Probability SE")+
+  scale_color_discrete(name = "Alpha")
+
+dfCompareEstimates %>%
+  filter(N==20 & maxMinute== 5)%>%
+ggplot(aes(x=p_1m, y = AvgPhatSE, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~modelType)+
+  theme_bw()+ 
+  labs(title  = "Average Probability SE", subtitle = "N = 20; 5 capture occcasions",x= "Per Minute Detection Probability",y = "Average Probability SE")+
+  scale_color_discrete(name = "Alpha")
+
+dfCompareEstimates %>%
+  filter(N==10 & maxMinute== 5)%>%
+ggplot(aes(x=p_1m, y = AvgPhatSE, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~modelType)+
+  theme_bw()+ 
+  labs(title  = "Average Probability SE", subtitle = "N = 10; 5 capture occcasions",x= "Per Minute Detection Probability",y = "Average Probability SE")+
+  scale_color_discrete(name = "Alpha")
+```
+
+Coverage
+
+```{r}
+dfCompareEstimates %>%
+  filter(N==20 & maxMinute== 10)%>%
+ggplot(aes(x=p_1m, y = coverage, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~modelType)+
+  theme_bw()+ 
+  labs(title  = "Coverage", subtitle = "N = 20; 10 capture occcasions",x= "Per Minute Detection Probability",y = "Bias")+
+  scale_color_discrete(name = "Alpha")
+
+
+dfCompareEstimates %>%
+  filter(N==10 & maxMinute== 10)%>%
+ggplot(aes(x=p_1m, y = coverage, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~modelType)+
+  theme_bw()+ 
+  labs(title  = "Coverage", subtitle = "N = 10; 10 capture occcasions",x= "Per Minute Detection Probability",y = "Bias")+
+  scale_color_discrete(name = "Alpha")
+
+dfCompareEstimates %>%
+  filter(N==20 & maxMinute== 5)%>%
+ggplot(aes(x=p_1m, y = coverage, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~modelType)+
+  theme_bw()+ 
+  labs(title  = "Coverage", subtitle = "N = 20; 5 capture occcasions",x= "Per Minute Detection Probability",y = "Bias")+
+  scale_color_discrete(name = "Alpha")
+
+dfCompareEstimates %>%
+  filter(N==10 & maxMinute== 5)%>%
+ggplot(aes(x=p_1m, y = coverage, color = as.factor(alpha)))+ 
+  geom_point()+
+  geom_line()+
+  facet_wrap(~modelType)+
+  theme_bw()+ 
+  labs(title  = "Coverage", subtitle = "N = 10; 5 capture occcasions",x= "Per Minute Detection Probability",y = "Bias")+
+  scale_color_discrete(name = "Alpha")
+```
 
 
 ### Closure Test
@@ -308,20 +886,6 @@ dfClosure_CJS%>%
 - 1_1 vs 62_2 shows how the order of results isn't always that the unconstrained model appears second
 
 I used deviance to figure out what the p value should be. Theoretically I should be using c_hat to adjust, but for now I will keep it as it is. 
-
-
-```{r}
-dfClosure_CJS%>%
-  filter(N == 20 & maxMinute == 10 & !duplicated(id) & p_CJS !=1)%>%
-ggplot()+ 
-  geom_boxplot(aes(x= as.factor(p_1m), y = p_CJS, color = as.factor(alpha)))+ 
-   geom_hline(aes(yintercept=0.05), color = "grey30")+
-  scale_color_discrete(name="Alpha")+
-  theme_bw()+
-  labs(title = "Results of LRT (Closed model vs CJS)", subtitle = "Significance level of 0.05", x = "Per minute detection probability", y = "p LRT")
-```
-
-
 ```{r}
 dfClosure_CJS%>%
   filter(N == 20 & maxMinute == 10 & !duplicated(id) )%>%
@@ -336,22 +900,126 @@ ggplot()+
 
 
 ```{r}
-dfClosure_CJS$pExactOne = ifelse(dfClosure_CJS$p_CJS == 1, 1, 0)
-nTotal = nrow(filter(dfClosure_CJS, N == 20 & maxMinute == 10 & !duplicated(id)))
 dfClosure_CJS%>%
-  filter(N == 20 & maxMinute == 10 & !duplicated(id))%>%
-  summarise(nOne = sum(pExactOne)/nTotal)
-
-dfClosure_Grouped = dfClosure_CJS%>%
-   filter(N == 20 & maxMinute == 10 & !duplicated(id))%>%
-  group_by(p_1m,alpha)%>%
-  summarise(pExactOne = n())
-
-dfClosure_CJS%>%
-  filter(N == 20 & maxMinute == 10 & !duplicated(id))%>%
-  group_by(p_1m,alpha)%>%
-  summarise(percentPvalOne = sum(pExactOne)/1000)
+  filter(N == 20 & maxMinute == 10 & !duplicated(id) & p_CJS !=1)%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = p_CJS, color = as.factor(alpha)))+ 
+   geom_hline(aes(yintercept=0.05), color = "grey30")+
+  scale_color_discrete(name="Alpha")+
+  theme_bw()+
+  labs(title = "Results of LRT (Closed model vs CJS)", subtitle = "Significance level of 0.05", x = "Per minute detection probability", y = "p LRT")
 ```
+
+
+
+### Power
+
+```{r}
+head(dfClosure_CJS)
+```
+
+
+```{r}
+dfCJS_Power = dfClosure_CJS%>%
+  filter(paramSimple == "p")%>%
+  mutate(Type = case_when(
+    p_CJS < 0.05 & alpha == 0 ~ "Type 1",
+    p_CJS > 0.05 & alpha != 0 ~ "Type 2",
+    p_CJS < 0.05 & alpha !=0 ~ "Power",
+    p_CJS > 0.05 & alpha == 0 ~ "True"
+  )
+         )
+
+
+```
+
+
+```{r}
+dfCJS_Power_Rate = dfCJS_Power%>%
+  distinct(id,.keep_all = TRUE)%>%
+  group_by(combinationNumber)%>%
+  mutate(totalCases = n())%>%
+  group_by(N,p_1m,alpha,maxMinute,combinationNumber,totalCases,Type)%>%
+  summarise(nType=n())%>%
+  ungroup()%>%
+  mutate(Percent_CJS=round(nType/totalCases*100,2))
+dfCJS_Power_Rate
+```
+
+Very strong power... let's see what happens when capture occasions fall
+```{r}
+cutoff = data.frame( x = c(-Inf, Inf), y = 5, cutoff = factor(5) )
+dfCJS_Power_Rate%>%
+  filter(N == 20 & maxMinute == 10 & !is.na(Type) & Type != "True")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percent_CJS, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percent_CJS, color = as.factor(alpha)))+
+  geom_hline(aes(yintercept=5,linetype="5 %"),color="black")+
+  scale_linetype_manual(name = "Significance level", values = c(5), 
+                      guide = guide_legend(override.aes = list(color = c("black"))))+
+  scale_color_discrete(name = "Alpha")+
+  facet_wrap(~Type)+
+  theme_bw()+
+  labs(title = "Error Rates Across Scenarios", subtitle = "N = 20; 10 capture occasions")
+```
+
+```{r}
+cutoff = data.frame( x = c(-Inf, Inf), y = 5, cutoff = factor(5) )
+dfCJS_Power_Rate%>%
+  filter(N == 20 & maxMinute == 5 & !is.na(Type) & Type != "True")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percent_CJS, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percent_CJS, color = as.factor(alpha)))+
+   geom_hline(aes(yintercept=5,linetype="5 %"),color="black")+
+  scale_linetype_manual(name = "Significance level", values = c(5), 
+                      guide = guide_legend(override.aes = list(color = c("black"))))+
+  scale_color_discrete(name = "Alpha")+
+  facet_wrap(~Type)+
+  theme_bw()+
+  labs(title = "Error Rates Across Scenarios", subtitle = "N = 20; 5 capture occasions")
+```
+
+
+```{r}
+dfPowerCombined= left_join(dfCJS_Power_Rate, dfOtisTest_Rate_Overall[,c("combinationNumber","Type","Percent_Overall")], by= c("combinationNumber","Type"))%>%
+  rename("LRT" = "Percent_CJS",
+         "Otis" = "Percent_Overall")
+```
+
+
+
+```{r}
+dfPowerCombined
+```
+
+
+
+
+```{r}
+dfPowerCombined%>%
+  pivot_longer(cols= c("Otis","LRT"), names_to = "ModelType", values_to ="Percentages")%>%
+  filter(N == 20 & maxMinute == 10 & !is.na(Type) & Type == "Power")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  facet_wrap(~ModelType)+
+  theme_bw()+
+  labs(title = "Power Across Scenarios", subtitle = "N = 20; 10 capture occasions")
+```
+
+```{r}
+dfPowerCombined%>%
+  pivot_longer(cols= c("Otis","LRT"), names_to = "ModelType", values_to ="Percentages")%>%
+  filter(N == 20 & maxMinute == 5 & !is.na(Type) & Type == "Power")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  facet_wrap(~ModelType)+
+  theme_bw()+
+  labs(title = "Power Across Scenarios", subtitle = "N = 20; 5 capture occasions")
+```
+
+Does it make sense to have a more powerful test but worse estimates??
 
 
 #### Alpha = 0.05
@@ -407,6 +1075,17 @@ all_cjs_models$model.table
 dfClosure_CJS%>%
   filter(id == "62_6")
 ```
+
+
+
+
+
+
+
+
+
+
+
 
 
 
