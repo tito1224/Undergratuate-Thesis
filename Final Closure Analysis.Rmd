@@ -338,15 +338,23 @@ dfOtisTest_Power = dfOtisTest_Power%>%
 ```
 
 
-Trying to find power by id won't work based on what I'm seeing here.
-```{r}
-dfOtisTest_Power%>%
-  group_by(N,p_1m,alpha,maxMinute,id,Type_k)%>%
-  summarise(n())%>%
-  ungroup()
-```
 
 Makes sense to do it by combination number I believe. Graph verifies that not a single case was rejected for combination number 1.
+ASK ABT THIS PART
+
+
+```{r}
+dfOtisPercent = dfOtisTest_Power%>%
+  filter(!is.na(p_k_Otis))%>%
+  distinct(id,.keep_all = TRUE)%>%
+  group_by(combinationNumber)%>%
+  summarise(percentDatasets= round(n()/1000,5)*100 )
+dfOtisPercent 
+```
+
+
+
+
 ```{r}
 dfOtisTest_Rate = dfOtisTest_Power%>%
   distinct(id,counts,.keep_all = TRUE)%>%
@@ -356,6 +364,7 @@ dfOtisTest_Rate = dfOtisTest_Power%>%
   summarise(nType=n())%>%
   ungroup()%>%
   mutate(Percent=round(nType/totalCases*100,2))
+dfOtisTest_Rate = left_join(dfOtisTest_Rate, dfOtisPercent,by="combinationNumber")
 dfOtisTest_Rate
 ```
 
@@ -376,16 +385,52 @@ ggplot()+
 Type 1 error stays largely within the bounds of the significance level. Max power is only slightly higher than 75% even when detection probability is high. 
 ```{r}
 dfOtisTest_Rate%>%
-  filter(N == 20 & maxMinute == 10 & !is.na(Type_k) & Type_k != "True")%>%
-  ggplot()+
-  geom_point(aes(x=p_1m, y = Percent, color = as.factor(alpha)))+
-  geom_line(aes(x=p_1m, y = Percent, color = as.factor(alpha)))+
-  geom_hline(aes(yintercept=5,linetype="5 %"),color="black")+
-  scale_linetype_manual(name = "Significance level", values = c(5), 
-                      guide = guide_legend(override.aes = list(color = c("black"))))+
-  facet_wrap(~Type_k)+
+  filter(N == 20 & maxMinute == 10 & !is.na(Type_k) & Type_k == "Power")%>%
+  ggplot(aes(x=p_1m, y = Percent, color = as.factor(alpha), label = percentDatasets))+
+  geom_point()+
+  geom_line()+
+  geom_text(hjust=0,vjust=-0.3)+
+  #geom_hline(aes(yintercept=5,linetype="5 %"),color="black")+
+  #scale_linetype_manual(name = "Significance level", values = c(5), 
+  #                    guide = guide_legend(override.aes = list(color = c("black"))))+
+  #facet_wrap(~maxMinute)+
   theme_bw()+
-  labs(title = "Error Rates Across Scenarios", subtitle = "N = 20; 10 capture occasions")+
+  labs(title = "Power of Conditional Otis Test Across Scenarios", subtitle = "N = 20; 10 capture occasions",x="Per minute detection probability",y="Power")+
+  scale_color_discrete(name="Alpha")
+```
+
+
+
+```{r}
+dfOtisTest_Rate%>%
+  filter(N == 20 & maxMinute == 5 & !is.na(Type_k) & Type_k == "Power")%>%
+  ggplot(aes(x=p_1m, y = Percent, color = as.factor(alpha), label = percentDatasets))+
+  geom_point()+
+  geom_line()+
+  geom_text(hjust=0,vjust=-0.3)+
+  #geom_hline(aes(yintercept=5,linetype="5 %"),color="black")+
+  #scale_linetype_manual(name = "Significance level", values = c(5), 
+  #                    guide = guide_legend(override.aes = list(color = c("black"))))+
+  #facet_wrap(~maxMinute)+
+  theme_bw()+
+  labs(title = "Power of Conditional Otis Test Across Scenarios", subtitle = "N = 20; 5 capture occasions",x="Per minute detection probability",y="Power")+
+  scale_color_discrete(name="Alpha")
+```
+
+
+```{r}
+dfOtisTest_Rate%>%
+  filter(N == 20  & !is.na(Type_k) & Type_k == "Power")%>%
+  ggplot(aes(x=p_1m, y = Percent, color = as.factor(alpha), label = percentDatasets))+
+  geom_point()+
+  geom_line()+
+  #geom_text(hjust=0,vjust=-0.3)+
+  #geom_hline(aes(yintercept=5,linetype="5 %"),color="black")+
+  #scale_linetype_manual(name = "Significance level", values = c(5), 
+  #                    guide = guide_legend(override.aes = list(color = c("black"))))+
+  facet_wrap(~maxMinute)+
+  theme_bw()+
+  labs(title = "Power of Conditional Otis Test Across Scenarios", subtitle = "N = 20; 5 capture occasions",x="Per minute detection probability",y="Power")+
   scale_color_discrete(name="Alpha")
 ```
 
@@ -406,18 +451,6 @@ dfOtisTest_Rate%>%
   labs(title = "Error Rates Across Scenarios", subtitle = "N = 20; 5 capture occasions")
 ```
 
-I could try and do an overall power test for the conditional C_k test
-```{r}
-dfOtisTest_Power%>%
-  distinct(id,counts,.keep_all = TRUE)%>%
-  group_by(Type_k)%>%
-  summarise(nType=n())%>%
-  ungroup()%>%
-  mutate(Percent = round(nType/sum(nType)*100,2))%>%
-  filter(Type_k %in% c("Power","Type 1","Type 2"))
-  
-```
-
 
 testing that numbers make sense
 ```{r}
@@ -433,7 +466,7 @@ testing that numbers make sense
 ```
 
 
-Now let's do the same for the pOverall values
+Now let's do the same for the pOverall values. If at least one p_k can be calculated for the conditional test, it means that p can be calculated for the overall test. So same idea that the % of datasets used applies here. 
 ```{r}
 dfOtisTest_Rate_Overall = dfOtisTest_Power%>%
   distinct(id,.keep_all = TRUE)%>%
@@ -443,61 +476,167 @@ dfOtisTest_Rate_Overall = dfOtisTest_Power%>%
   summarise(nType=n())%>%
   ungroup()%>%
   mutate(Percent_Overall=round(nType/totalCases*100,2))
+dfOtisTest_Rate_Overall = left_join(dfOtisTest_Rate_Overall, dfOtisPercent,by="combinationNumber")
 dfOtisTest_Rate_Overall
 ```
 
+
 ```{r}
 dfOtisTest_Rate_Overall%>%
-  filter(N == 20 & maxMinute == 10 & !is.na(Type) & Type != "True")%>%
-  ggplot()+
-  geom_point(aes(x=p_1m, y = Percent_Overall, color = as.factor(alpha)))+
-  geom_line(aes(x=p_1m, y = Percent_Overall, color = as.factor(alpha)))+
-  geom_hline(aes(yintercept=5,linetype="5 %"),color="black")+
-  scale_linetype_manual(name = "Significance level", values = c(5), 
-                      guide = guide_legend(override.aes = list(color = c("black"))))+
+  filter(N == 20 & maxMinute == 10 & !is.na(Type) & Type == "Power")%>%
+  ggplot(aes(x=p_1m, y = Percent_Overall, color = as.factor(alpha),label=percentDatasets))+
+  geom_point()+
+  geom_line()+
+  geom_text(hjust=0,vjust=0)+
+  #geom_hline(aes(yintercept=5,linetype="5 %"),color="black")+
+  #scale_linetype_manual(name = "Significance level", values = c(5), 
+  #                    guide = guide_legend(override.aes = list(color = c("black"))))+
    scale_color_discrete(name="Alpha")+
   facet_wrap(~Type)+
   theme_bw()+
-  labs(title = "Error Rates Across Scenarios With General Otis Test", subtitle = "N = 20; 10 capture occasions",x="Per minute detection probability",y="Percent")
+  labs(title = "Power Across Scenarios With General Otis Test", subtitle = "N = 20; 10 capture occasions",x="Per minute detection probability",y="Power")
 ```
 
 ```{r}
 dfOtisTest_Rate_Overall%>%
-  filter(N == 20 & maxMinute == 5 & !is.na(Type) & Type != "True")%>%
-  ggplot()+
-  geom_point(aes(x=p_1m, y = Percent_Overall, color = as.factor(alpha)))+
-  geom_line(aes(x=p_1m, y = Percent_Overall, color = as.factor(alpha)))+
-  geom_hline(aes(yintercept=5,linetype="5 %"),color="black")+
-  scale_linetype_manual(name = "Significance level", values = c(5), 
-                      guide = guide_legend(override.aes = list(color = c("black"))))+
+  filter(N == 20 & maxMinute == 5 & !is.na(Type) & Type == "Power")%>%
+  ggplot(aes(x=p_1m, y = Percent_Overall, color = as.factor(alpha),label=percentDatasets))+
+  geom_point()+
+  geom_line()+
+  geom_text(hjust=0,vjust=0)+
+  #geom_hline(aes(yintercept=5,linetype="5 %"),color="black")+
+  #scale_linetype_manual(name = "Significance level", values = c(5), 
+  #                    guide = guide_legend(override.aes = list(color = c("black"))))+
    scale_color_discrete(name="Alpha")+
   facet_wrap(~Type)+
   theme_bw()+
-  labs(title = "Error Rates Across Scenarios with General Otis Test", subtitle = "N = 20; 5 capture occasions")
+  labs(title = "Power Across Scenarios With General Otis Test", subtitle = "N = 20; 5 capture occasions",x="Per minute detection probability",y="Power")
 ```
 
 Even when the population is low, the power of the test is very strong as long as we have 10 capture occasions. So # of capture occasions affects power of the test more than the population size. 
+
+remove significance of 5% on the Power and Type 2 part - only keep for Type 1
 ```{r}
 dfOtisTest_Rate_Overall%>%
-  filter(N == 10 & maxMinute == 10 & !is.na(Type) & Type != "True")%>%
-  ggplot()+
-  geom_point(aes(x=p_1m, y = Percent_Overall, color = as.factor(alpha)))+
-  geom_line(aes(x=p_1m, y = Percent_Overall, color = as.factor(alpha)))+
+  filter(N == 10 & maxMinute == 10 & !is.na(Type) & Type == "Power")%>%
+  ggplot(aes(x=p_1m, y = Percent_Overall, color = as.factor(alpha),label=percentDatasets))+
+  geom_point()+
+  geom_line()+
+  geom_text(hjust=0,vjust=0)+
+  #geom_hline(aes(yintercept=5,linetype="5 %"),color="black")+
+  #scale_linetype_manual(name = "Significance level", values = c(5), 
+  #                    guide = guide_legend(override.aes = list(color = c("black"))))+
+   scale_color_discrete(name="Alpha")+
+  facet_wrap(~Type)+
+  theme_bw()+
+  labs(title = "Power Across Scenarios With General Otis Test", subtitle = "N = 10; 10 capture occasions",x="Per minute detection probability",y="Power")
+```
+
+### Power of Modified Otis Test
+For each id, use 0.05/(t-2) to test for significance. If any of them reject, then overall we reject the null hypothesis. 
+
+if t = 10, the probability of seeing at least one significant result due to chance is: 1-(1-0.05)^(8) = 0.337
+if t = 5, the probability of seeing at least one significant result due to chance is:1-(1-0.05)^(3) = 0.142625
+
+But this is assuming we always have t-2 tests -> and in the actual data we have less than t-2 tests... 
+
+
+```{r}
+head(dfOtisTest_Power)
+
+dfOtisTest_Power%>%
+  distinct(id,counts,.keep_all = TRUE)%>%
+  group_by(id)%>%
+  mutate(nTests = n(),
+         bOverallReject = if_else(any(p_k_Otis < 0.05/n()),"Reject","Fail to Reject"))
+```
+
+
+```{r}
+dfOtisTest_Rate_Overall_v2Org = dfOtisTest_Power%>%
+  ungroup()%>%
+  select(id, N,p_1m,alpha,maxMinute,combinationNumber, counts, p_k_Otis) %>%
+  unique() %>%
+  group_by(id, N,p_1m,alpha,maxMinute,combinationNumber)%>%
+  filter(!is.na(p_k_Otis))%>%
+  summarize(bOverallReject = if_else(any(p_k_Otis < 0.05/n()),"Reject","Fail to Reject"))
+
+# dfOtisTest_Rate_Overall_v2Org = dfOtisTest_Power%>%
+#   ungroup()%>%
+#   distinct(id,counts,.keep_all = TRUE)%>%
+#   filter(!is.na(p_k_Otis))%>%
+#   group_by(id)%>%
+#   mutate(nTests = n(),
+#          bOverallReject = if_else(any(p_k_Otis < 0.05/nTests),"Reject","Fail to Reject"))
+
+
+dfOtisTest_Rate_Overall_v2Org = dfOtisTest_Rate_Overall_v2Org%>%
+  mutate(TypeModified = case_when(
+    bOverallReject == "Reject" & alpha == 0 ~ "Type 1",
+    bOverallReject == "Fail to Reject" & alpha != 0 ~ "Type 2",
+    bOverallReject == "Reject"  & alpha !=0 ~ "Power",
+    bOverallReject == "Fail to Reject" & alpha == 0 ~ "True"
+  )
+         )
+```
+
+```{r}
+dfOtisTest_Rate_Overall_v2 = dfOtisTest_Rate_Overall_v2Org%>%
+  distinct(id,.keep_all = TRUE)%>%
+  group_by(combinationNumber)%>%
+  mutate(totalCases = n())%>%
+  group_by(N,p_1m,alpha,maxMinute,combinationNumber,totalCases,TypeModified)%>%
+  summarise(nType=n())%>%
+  ungroup()%>%
+  mutate(Percent_Modified=round(nType/totalCases*100,2))
+dfOtisTest_Rate_Overall_v2 = left_join(dfOtisTest_Rate_Overall_v2, dfOtisPercent,by="combinationNumber")
+dfOtisTest_Rate_Overall_v2
+```
+
+
+
+The type 1 error rate is not more than 1%..
+```{r}
+dfOtisTest_Rate_Overall_v2%>%
+  filter(N == 20 & maxMinute == 10 & !is.na(TypeModified) & TypeModified != "True")%>%
+  ggplot(aes(x=p_1m, y = Percent_Modified, color = as.factor(alpha)))+
+  geom_point()+
+  geom_line()+
+  #geom_text(hjust=0,vjust=0)+
   geom_hline(aes(yintercept=5,linetype="5 %"),color="black")+
   scale_linetype_manual(name = "Significance level", values = c(5), 
                       guide = guide_legend(override.aes = list(color = c("black"))))+
    scale_color_discrete(name="Alpha")+
-  facet_wrap(~Type)+
+  facet_wrap(~TypeModified)+
   theme_bw()+
-  labs(title = "Error Rates Across Scenarios", subtitle = "N = 10; 10 capture occasions",x="Per minute detection probability",y="Rate")
+  labs(title = "Error Rates Across Scenarios With Modified Otis Test", subtitle = "N = 20; 10 capture occasions",x="Per minute detection probability",y="Power")
 ```
 
+1% error rate -> more than the expected too. I 
+```{r}
+0.05/(10-2)
+dfOtisTest_Rate_Overall_v2%>%
+  filter(N == 20 & maxMinute == 10 & !is.na(TypeModified) & TypeModified == "Type 1")
+```
+
+```{r}
+dfOtisTest_Rate_Overall_v2Org%>%
+  filter(combinationNumber == 52)
+```
+```{r}
+dfOtisTest_Power%>%
+  filter(id == "52_116")
+```
 
 
 ```{r}
 dfPowerOtisCombined= left_join(dfOtisTest_Rate, dfOtisTest_Rate_Overall[,c("combinationNumber","Type","Percent_Overall")], by= c("combinationNumber","Type_k"="Type"))%>%
   rename("Conditional Test"="Percent",
          "Full Test" = "Percent_Overall")
+
+
+dfPowerOtisCombined= left_join(dfPowerOtisCombined, dfOtisTest_Rate_Overall_v2[,c("combinationNumber","TypeModified","Percent_Modified")], by= c("combinationNumber","Type_k"="TypeModified"))%>%
+  rename("Modified Test" = "Percent_Modified")
 ```
 
 ```{r}
@@ -507,16 +646,17 @@ head(dfPowerOtisCombined)
 Side by side comparison shows that the overall test is stronger
 ```{r}
 dfPowerOtisCombined%>%
-  pivot_longer(cols= c("Conditional Test","Full Test"), names_to = "ModelType", values_to ="Percentages")%>%
+  pivot_longer(cols= c("Conditional Test","Full Test","Modified Test"), names_to = "ModelType", values_to ="Percentages")%>%
   filter(N == 20 & maxMinute == 10 & !is.na(Type_k) & Type_k == "Power")%>%
   ggplot()+
   geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
   geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
   facet_wrap(~ModelType)+
   theme_bw()+
-  labs(title = "Power Across Scenarios", subtitle = "N = 20; 10 capture occasions",x="Per minute detection probability")+
+  labs(title = "Power Across Scenarios", subtitle = "N = 20; 10 capture occasions",x="Per minute detection probability",y="Power")+
    scale_color_discrete(name="Alpha")
 ```
+
 
 ## CJS
 
@@ -899,18 +1039,6 @@ ggplot()+
 
 
 
-```{r}
-dfClosure_CJS%>%
-  filter(N == 20 & maxMinute == 10 & !duplicated(id) & p_CJS !=1)%>%
-ggplot()+ 
-  geom_boxplot(aes(x= as.factor(p_1m), y = p_CJS, color = as.factor(alpha)))+ 
-   geom_hline(aes(yintercept=0.05), color = "grey30")+
-  scale_color_discrete(name="Alpha")+
-  theme_bw()+
-  labs(title = "Results of LRT (Closed model vs CJS)", subtitle = "Significance level of 0.05", x = "Per minute detection probability", y = "p LRT")
-```
-
-
 
 ### Power
 
@@ -946,6 +1074,60 @@ dfCJS_Power_Rate = dfCJS_Power%>%
 dfCJS_Power_Rate
 ```
 
+
+
+```{r}
+head(dfCJS_Power)
+dfCJS_Power[is.na(dfCJS_Power$p_CJS),]
+dfCJS_Power%>%
+  filter(p_CJS==1)
+```
+
+So there IS a difference - just negligible
+```{r}
+dfOtisTest_Power%>%
+  filter(!is.na(p_k_Otis)& combinationNumber== 3)%>%
+  distinct(id,.keep_all = TRUE)%>%
+  group_by(combinationNumber)%>%
+  summarise(n = n(),
+    percentDatasets= round(n()/1000,5)*100 )
+
+
+dfCJS_Power%>%
+  filter(combinationNumber == 3)%>%
+  distinct(id,.keep_all = TRUE)%>%
+  group_by(combinationNumber)%>%
+  summarise(n=n(),
+            percentDatasets= round(n()/1000,5)*100 )
+```
+
+
+```{r}
+dfOtisTest_Power%>%
+  filter(is.na(p_k_Otis))
+
+dfOtisTest_Power%>%
+  filter(id == "3_411")
+
+dfCJS_Power%>%
+  filter(id == "3_411")
+```
+
+
+
+```{r}
+dfCJSPercent = dfCJS_Power%>%
+  distinct(id,.keep_all = TRUE)%>%
+  group_by(combinationNumber)%>%
+  summarise(percentDatasets= round(n()/1000,5)*100 )
+dfCJSPercent%>%
+  arrange(percentDatasets)
+dfOtisPercent %>%
+  arrange(percentDatasets)
+```
+
+
+
 Very strong power... let's see what happens when capture occasions fall
 ```{r}
 cutoff = data.frame( x = c(-Inf, Inf), y = 5, cutoff = factor(5) )
@@ -980,10 +1162,24 @@ dfCJS_Power_Rate%>%
 ```
 
 
+
 ```{r}
-dfPowerCombined= left_join(dfCJS_Power_Rate, dfOtisTest_Rate_Overall[,c("combinationNumber","Type","Percent_Overall")], by= c("combinationNumber","Type"))%>%
+dfCJS_Power
+```
+
+
+
+```{r}
+dfPowerOtisCombined
+```
+
+
+```{r}
+dfPowerCombined= left_join(dfCJS_Power_Rate, dfPowerOtisCombined[,c("combinationNumber","Type_k","Conditional Test","Full Test","Modified Test"),], by= c("combinationNumber","Type"="Type_k"))%>%
   rename("LRT" = "Percent_CJS",
-         "Otis" = "Percent_Overall")
+         "Conditional Otis Test" = "Conditional Test",
+         "Full Otis Test" = "Full Test",
+         "Modified Otis Test"="Modified Test")
 ```
 
 
@@ -997,123 +1193,500 @@ dfPowerCombined
 
 ```{r}
 dfPowerCombined%>%
-  pivot_longer(cols= c("Otis","LRT"), names_to = "ModelType", values_to ="Percentages")%>%
+  pivot_longer(cols= c("Conditional Otis Test","Modified Otis Test","Full Otis Test","LRT"), names_to = "ModelType", values_to ="Percentages")%>%
   filter(N == 20 & maxMinute == 10 & !is.na(Type) & Type == "Power")%>%
   ggplot()+
   geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
   geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
   facet_wrap(~ModelType)+
+  scale_color_discrete(name = "Alpha")+
   theme_bw()+
-  labs(title = "Power Across Scenarios", subtitle = "N = 20; 10 capture occasions")
+  labs(title = "Power Across Scenarios", subtitle = "N = 20; 10 capture occasions",y="Power",x="Per minute detection probability")
 ```
 
 ```{r}
 dfPowerCombined%>%
-  pivot_longer(cols= c("Otis","LRT"), names_to = "ModelType", values_to ="Percentages")%>%
+   pivot_longer(cols= c("Conditional Otis Test","Modified Otis Test","Full Otis Test","LRT"), names_to = "ModelType", values_to ="Percentages")%>%
   filter(N == 20 & maxMinute == 5 & !is.na(Type) & Type == "Power")%>%
   ggplot()+
   geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
   geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
   facet_wrap(~ModelType)+
   theme_bw()+
+  scale_color_discrete(name="Alpha")+
   labs(title = "Power Across Scenarios", subtitle = "N = 20; 5 capture occasions")
 ```
 
-Does it make sense to have a more powerful test but worse estimates??
+# Boot Strapping 
 
+Use the case when alpha = 0 for each value of p to recompute the critical value. We are doing this because we know that the asymptotics break down. 
 
-#### Alpha = 0.05
+Basically, find the value where we reject H0 when alpha = 0 5% of the time. 
+
+So basically find the 5th percentile of p values for each per minute detection probability (when alpha = 0). Using this new cutoff, we can recompute power!
+
 
 ```{r}
-dfClosure_CJS%>%
-  filter(N == 20 & maxMinute == 10 & !duplicated(id) & alpha==0.05 & p_1m==0.1 & p_CJS > 0.05)%>%
-  arrange(desc(p_CJS))
+dfOtisCutoff = dfOtisTest%>%
+  filter(alpha == 0)%>%
+  distinct(id,counts,.keep_all = TRUE)%>%
+  group_by(combinationNumber,N,p_1m,maxMinute)%>%
+  summarise(CV_Conditional_Otis = quantile(p_k_Otis,probs=0.05,na.rm=TRUE,names=TRUE),
+            CV_Overall_Otis =  quantile(pOverall_Otis,probs=0.05,na.rm=TRUE,names=TRUE))
 
+dfCJSCutoff = dfClosure_CJS%>%
+  filter(alpha == 0)%>%
+  distinct(id,.keep_all = TRUE)%>%
+  group_by(combinationNumber,N,p_1m,maxMinute)%>%
+  summarise(CV_LRT = quantile(p_CJS ,probs=0.05,na.rm=TRUE,names=TRUE))
+
+dfCutoff = left_join(dfOtisCutoff, dfCJSCutoff,by= c("combinationNumber","N","maxMinute","p_1m"))
+head(dfCutoff)
 ```
 
 
 
-Let's look @ the first case of id 62_1,62_6
+## Otis 
+
 ```{r}
-dfOriginalData%>%
-  filter(id == "62_6")
+dfOtisTest_Power_Boot = left_join(dfOtisTest, dfCutoff[,c("N","p_1m","maxMinute","CV_Conditional_Otis","CV_Overall_Otis")],by=c("N","p_1m","maxMinute"))
 ```
 
-First check that everything was fit properly
-
-unrestrained model
+Ask about "=" sign
 ```{r}
-dfMark = dfOriginalData%>%
-  filter(id == "62_6")
-dfMark = dfMark[,"ch"]
-strFormula = "~1"
-strFormula_phi = "~1"
-strModel = "CJS"
-pformula = list(formula = eval(parse_expr(strFormula)),share=TRUE)
-phiformula = list(formula = eval(parse_expr(strFormula_phi)))
-scenarioSimNum=2
-model_no_restriction = mark(dfMark, model = strModel, model.parameters = list(Phi = phiformula, p=pformula),prefix=scenarioSimNum,delete=TRUE,output=FALSE,model.name="cjs_unconstrain")
-model_no_restriction$results$real
-```
+dfOtisTest_Power_Boot = dfOtisTest_Power_Boot%>%
+  mutate(Type_k = case_when(
+    p_k_Otis <= CV_Conditional_Otis & alpha == 0 ~ "Type 1",
+    p_k_Otis > CV_Conditional_Otis & alpha != 0 ~ "Type 2",
+    p_k_Otis <= CV_Conditional_Otis & alpha !=0 ~ "Power",
+    p_k_Otis > CV_Conditional_Otis & alpha == 0 ~ "True"
+  )
+         )
 
-In this case we can see that the estimate of p is actually better when the population is closed - so makes sense that we fail to reject closure.
-```{r}
-strFormula = "~1"
-strFormula_phi = "~1"
-strModel = "CJS"
-pformula = list(formula = eval(parse_expr(strFormula)),share=TRUE)
-phiformula = list(formula = eval(parse_expr(strFormula_phi)),fixed=1)
-scenarioSimNum=2
-model_restriction = mark(dfMark, model = strModel, model.parameters = list(Phi = phiformula, p=pformula),prefix=scenarioSimNum,delete=TRUE,output=FALSE,model.name="cjs_constrain")
-model_restriction$results$real
-```
 
-```{r}
-all_cjs_models = collect.models(type = "CJS")
-all_cjs_models$model.table
-
-dfClosure_CJS%>%
-  filter(id == "62_6")
+dfOtisTest_Power_Boot = dfOtisTest_Power_Boot%>%
+  mutate(Type = case_when(
+    pOverall_Otis <= CV_Overall_Otis & alpha == 0 ~ "Type 1",
+    pOverall_Otis > CV_Overall_Otis & alpha != 0 ~ "Type 2",
+    pOverall_Otis <= CV_Overall_Otis & alpha !=0 ~ "Power",
+    pOverall_Otis > CV_Overall_Otis & alpha == 0 ~ "True"
+  )
+         )
 ```
 
 
+```{r}
+dfOtisTest_Rate_Boot = dfOtisTest_Power_Boot%>%
+  distinct(id,counts,.keep_all = TRUE)%>%
+  group_by(combinationNumber)%>%
+  mutate(totalCases = n())%>%
+  group_by(N,p_1m,alpha,maxMinute,combinationNumber,totalCases,Type_k)%>%
+  summarise(nType=n())%>%
+  ungroup()%>%
+  mutate(Percent=round(nType/totalCases*100,2))
+dfOtisTest_Rate_Boot = left_join(dfOtisTest_Rate_Boot, dfOtisPercent,by="combinationNumber")
+dfOtisTest_Rate_Boot
+```
 
-
-
-
-
-
-
-
-
-
-
-
-
-TEST2 : So, TEST2 asks ‘of those marked animals not seen at (i+1), but known to be alive at (i+1) (since they
-were captured after i+1), does when they were next seen (i+2, i+3...) depend on whether or not they were
-seen at (i)? In practice, TEST 2 is perhaps most useful for testing the basic assumption of ‘equal
-catchability’ of marked animals
-
-TEST3: In general, TEST 3 tests the assumption that all marked animals alive at (i) have the same probability
-of surviving to (i+1) – the second CJS assumption. In other words, does the probability that an individual known to be alive at occasion (i) is ever seen again depend on whether it was marked at or before occasion (i)?
-
-So, in a very loose sense, TEST 2 deals with ‘recapture problems’, while TEST 3 deals with
-‘survival problems’
-
-
-
-Interesting because 51_434, 8_476, etc will give c hat values of 0. Maybe I can write a function to calculate the chat and if it gives 0 I can remove those data points? I still don't understand what is causing these issues, so verify w Dr. Bonner
 
 ```{r}
-#dfMark = dfOriginalData%>%
-#  filter(id == "62_1")
-#dfMark = dfMark[,"ch"]
-
-#dfMark_processed =process.data(dfMark,model="CJS")
-#dfMark_RELEASE = release.gof(dfMark_processed)
-#dfMark_RELEASE
-#chat = dfMark_RELEASE[3,"Chi.square"]/dfMark_RELEASE[3,"df"]
+dfOtisTest_Rate_Boot%>%
+  filter(N == 20 & maxMinute == 10 & !is.na(Type_k) & Type_k == "Power")%>%
+  ggplot(aes(x=p_1m, y = Percent, color = as.factor(alpha), label = percentDatasets))+
+  geom_point()+
+  geom_line()+
+  geom_text(hjust=0,vjust=-0.3)+
+  #geom_hline(aes(yintercept=5,linetype="5 %"),color="black")+
+  #scale_linetype_manual(name = "Significance level", values = c(5), 
+  #                    guide = guide_legend(override.aes = list(color = c("black"))))+
+  #facet_wrap(~maxMinute)+
+  theme_bw()+
+  labs(title = "Power of Conditional Otis Test Across Scenarios (Bootstrapped)", subtitle = "N = 20; 10 capture occasions",x="Per minute detection probability",y="Power")+
+  scale_color_discrete(name="Alpha")
 ```
+
+This is the important part -> when capture scenarios is low, bootstrapped versions are *much* better
+```{r}
+dfOtisTest_Rate_Boot%>%
+  filter(N == 20 & maxMinute == 5 & !is.na(Type_k) & Type_k == "Power")%>%
+  ggplot(aes(x=p_1m, y = Percent, color = as.factor(alpha), label = percentDatasets))+
+  geom_point()+
+  geom_line()+
+  geom_text(hjust=0,vjust=-0.3)+
+  #geom_hline(aes(yintercept=5,linetype="5 %"),color="black")+
+  #scale_linetype_manual(name = "Significance level", values = c(5), 
+  #                    guide = guide_legend(override.aes = list(color = c("black"))))+
+  #facet_wrap(~maxMinute)+
+  theme_bw()+
+  labs(title = "Power of Conditional Otis Test Across Scenarios (Bootstrapped)", subtitle = "N = 20; 5 capture occasions",x="Per minute detection probability",y="Power")+
+  scale_color_discrete(name="Alpha")
+```
+
+```{r}
+dfOtisTest_Rate_Boot%>%
+  filter(N == 20 & maxMinute == 5 & !is.na(Type_k) & Type_k %in% c("Power","Type 1"))%>%
+  ggplot(aes(x=p_1m, y = Percent, color = as.factor(alpha), label = percentDatasets))+
+  geom_point()+
+  geom_line()+
+  #geom_text(hjust=0,vjust=-0.3)+
+  geom_hline(data = dfOtisTest_Rate_Boot %>% filter(Type_k == "Type 1"),
+            aes(yintercept=5,linetype="5 %"),color="black")+
+  scale_linetype_manual(name = "Significance level", values = c(5), 
+                      guide = guide_legend(override.aes = list(color = c("black"))))+
+  facet_wrap(~Type_k)+
+  theme_bw()+
+  labs(title = "Power of Conditional Otis Test Across Scenarios (Bootstrapped)", subtitle = "N = 20; 5 capture occasions",x="Per minute detection probability",y="Power")+
+  scale_color_discrete(name="Alpha")
+```
+
+
+
+
+```{r}
+dfOtisTest_Rate_Overall_Boot = dfOtisTest_Power_Boot%>%
+  distinct(id,.keep_all = TRUE)%>%
+  group_by(combinationNumber)%>%
+  mutate(totalCases = n())%>%
+  group_by(N,p_1m,alpha,maxMinute,combinationNumber,totalCases,Type)%>%
+  summarise(nType=n())%>%
+  ungroup()%>%
+  mutate(Percent_Overall=round(nType/totalCases*100,2))
+dfOtisTest_Rate_Overall_Boot = left_join(dfOtisTest_Rate_Overall_Boot, dfOtisPercent,by="combinationNumber")
+dfOtisTest_Rate_Overall_Boot
+```
+
+```{r}
+dfOtisTest_Rate_Overall_Boot%>%
+  filter(N == 20 & maxMinute == 10 & !is.na(Type) & Type == "Power")%>%
+  ggplot(aes(x=p_1m, y = Percent_Overall, color = as.factor(alpha), label = percentDatasets))+
+  geom_point()+
+  geom_line()+
+  geom_text(hjust=0,vjust=-0.3)+
+  #geom_hline(aes(yintercept=5,linetype="5 %"),color="black")+
+  #scale_linetype_manual(name = "Significance level", values = c(5), 
+  #                    guide = guide_legend(override.aes = list(color = c("black"))))+
+  #facet_wrap(~maxMinute)+
+  theme_bw()+
+  labs(title = "Power of Overall Otis Test Across Scenarios (Bootstrapped)", subtitle = "N = 20; 10 capture occasions",x="Per minute detection probability",y="Power")+
+  scale_color_discrete(name="Alpha")
+```
+
+
+
+```{r}
+dfOtisTest_Rate_Overall_Boot%>%
+  filter(N == 20 & maxMinute == 5 & !is.na(Type) & Type %in% c("Power","Type 1"))%>%
+  ggplot(aes(x=p_1m, y = Percent_Overall, color = as.factor(alpha), label = percentDatasets))+
+  geom_point()+
+  geom_line()+
+  #geom_text(hjust=0,vjust=-0.3)+
+  geom_hline(data = dfOtisTest_Rate_Overall_Boot %>% filter(Type == "Type 1"),
+            aes(yintercept=5,linetype="5 %"),color="black")+
+  scale_linetype_manual(name = "Significance level", values = c(5), 
+                      guide = guide_legend(override.aes = list(color = c("black"))))+
+  facet_wrap(~Type)+
+  theme_bw()+
+  labs(title = "Power of Overall Otis Test Across Scenarios (Bootstrapped)", subtitle = "N = 20; 5 capture occasions",x="Per minute detection probability",y="Power")+
+  scale_color_discrete(name="Alpha")
+```
+
+
+
+```{r}
+dfOtisTest_Rate_Overall_Boot_v2Org = dfOtisTest_Power_Boot%>%
+  ungroup()%>%
+  select(id, N,p_1m,alpha,maxMinute,combinationNumber, counts, p_k_Otis) %>%
+  unique() %>%
+  group_by(id, N,p_1m,alpha,maxMinute,combinationNumber)%>%
+  filter(!is.na(p_k_Otis))%>%
+  summarize(bOverallReject = if_else(any(p_k_Otis < 0.05/n()),"Reject","Fail to Reject"))
+
+
+dfOtisTest_Rate_Overall_Boot_v2Org = dfOtisTest_Rate_Overall_Boot_v2Org%>%
+  mutate(TypeModified = case_when(
+    bOverallReject == "Reject" & alpha == 0 ~ "Type 1",
+    bOverallReject == "Fail to Reject" & alpha != 0 ~ "Type 2",
+    bOverallReject == "Reject"  & alpha !=0 ~ "Power",
+    bOverallReject == "Fail to Reject" & alpha == 0 ~ "True"
+  )
+         )
+```
+
+```{r}
+dfOtisTest_Rate_Overall_Boot_v2 = dfOtisTest_Rate_Overall_Boot_v2Org%>%
+  distinct(id,.keep_all = TRUE)%>%
+  group_by(combinationNumber)%>%
+  mutate(totalCases = n())%>%
+  group_by(N,p_1m,alpha,maxMinute,combinationNumber,totalCases,TypeModified)%>%
+  summarise(nType=n())%>%
+  ungroup()%>%
+  mutate(Percent_Modified=round(nType/totalCases*100,2))
+dfOtisTest_Rate_Overall_Boot_v2 = left_join(dfOtisTest_Rate_Overall_Boot_v2, dfOtisPercent,by="combinationNumber")
+dfOtisTest_Rate_Overall_Boot_v2
+```
+
+
+```{r}
+dfOtisTest_Rate_Overall_Boot_v2%>%
+  filter(N == 20 & maxMinute == 10 & !is.na(TypeModified) & TypeModified %in% c("Power","Type 1"))%>%
+  ggplot(aes(x=p_1m, y = Percent_Modified, color = as.factor(alpha)))+
+  geom_point()+
+  geom_line()+
+  #geom_text(hjust=0,vjust=0)+
+  geom_hline(data = dfOtisTest_Rate_Overall_Boot_v2 %>% filter(TypeModified == "Type 1"),aes(yintercept=5,linetype="5 %"),color="black")+
+  scale_linetype_manual(name = "Significance level", values = c(5), 
+                      guide = guide_legend(override.aes = list(color = c("black"))))+
+   scale_color_discrete(name="Alpha")+
+  facet_wrap(~TypeModified)+
+  theme_bw()+
+  labs(title = "Error Rates Across Scenarios With Modified Otis Test", subtitle = "N = 20; 10 capture occasions",x="Per minute detection probability",y="Power")
+```
+
+```{r}
+dfPowerOtisCombinedBoot= left_join(dfOtisTest_Rate_Boot, dfOtisTest_Rate_Overall_Boot[,c("combinationNumber","Type","Percent_Overall")], by= c("combinationNumber","Type_k"="Type"))%>%
+  rename("Conditional Test Boot"="Percent",
+         "Full Test Boot" = "Percent_Overall")
+
+
+dfPowerOtisCombinedBoot= left_join(dfPowerOtisCombinedBoot, dfOtisTest_Rate_Overall_Boot_v2[,c("combinationNumber","TypeModified","Percent_Modified")], by= c("combinationNumber","Type_k"="TypeModified"))%>%
+  rename("Modified Test Boot" = "Percent_Modified")
+```
+
+```{r}
+head(dfPowerOtisCombinedBoot)
+```
+
+
+
+Side by side comparison shows that the overall test is stronger
+```{r}
+dfPowerOtisCombinedBoot%>%
+  pivot_longer(cols= c("Conditional Test Boot","Full Test Boot","Modified Test Boot"), names_to = "ModelType", values_to ="Percentages")%>%
+  filter(N == 20 & maxMinute == 10 & !is.na(Type_k) & Type_k == "Power")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  facet_wrap(~ModelType)+
+  theme_bw()+
+  labs(title = "Power Across Scenarios", subtitle = "N = 20; 10 capture occasions",x="Per minute detection probability",y="Power")+
+   scale_color_discrete(name="Alpha")
+```
+
+```{r}
+dfPowerOtisCombinedBoot%>%
+  pivot_longer(cols= c("Conditional Test Boot","Full Test Boot","Modified Test Boot"), names_to = "ModelType", values_to ="Percentages")%>%
+  filter(N == 20 & maxMinute == 5 & !is.na(Type_k) & Type_k == "Power")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  facet_wrap(~ModelType)+
+  theme_bw()+
+  labs(title = "Power Across Scenarios", subtitle = "N = 20; 5 capture occasions",x="Per minute detection probability",y="Power")+
+   scale_color_discrete(name="Alpha")
+```
+
+
+
+## CJS
+
+
+```{r}
+dfCJS_Power_Boot = left_join(dfClosure_CJS, dfCutoff[,c("N","p_1m","maxMinute","CV_LRT")],by=c("N","p_1m","maxMinute"))
+
+dfCJS_Power_Boot = dfCJS_Power_Boot%>%
+  filter(paramSimple == "p")%>%
+  mutate(Type = case_when(
+    p_CJS <= CV_LRT & alpha == 0 ~ "Type 1",
+    p_CJS > CV_LRT & alpha != 0 ~ "Type 2",
+    p_CJS <= CV_LRT & alpha !=0 ~ "Power",
+    p_CJS > CV_LRT & alpha == 0 ~ "True"
+  )
+         )
+
+
+```
+
+
+```{r}
+dfCJS_Power_Rate_Boot = dfCJS_Power_Boot%>%
+  distinct(id,.keep_all = TRUE)%>%
+  group_by(combinationNumber)%>%
+  mutate(totalCases = n())%>%
+  group_by(N,p_1m,alpha,maxMinute,combinationNumber,totalCases,Type)%>%
+  summarise(nType=n())%>%
+  ungroup()%>%
+  mutate(Percent_CJS_Boot=round(nType/totalCases*100,2))
+dfCJS_Power_Rate_Boot
+```
+
+```{r}
+dfCJS_Power_Rate_Boot%>%
+  filter(N == 20 & maxMinute == 5 & !is.na(Type) & Type %in% c("Power","Type 1"))%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percent_CJS_Boot, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percent_CJS_Boot, color = as.factor(alpha)))+
+   geom_hline(data = dfCJS_Power_Rate_Boot%>%filter(Type == "Type 1"),aes(yintercept=5,linetype="5 %"),color="black")+
+  scale_linetype_manual(name = "Significance level", values = c(5), 
+                      guide = guide_legend(override.aes = list(color = c("black"))))+
+  scale_color_discrete(name = "Alpha")+
+  facet_wrap(~Type)+
+  theme_bw()+
+  labs(title = "Error Rates Across Scenarios", subtitle = "N = 20; 5 capture occasions")
+```
+
+
+```{r}
+dfPowerCombinedBoot= left_join(dfCJS_Power_Rate_Boot, dfPowerOtisCombinedBoot[,c("combinationNumber","Type_k","Conditional Test Boot","Full Test Boot","Modified Test Boot"),], by= c("combinationNumber","Type"="Type_k"))%>%
+  rename("LRT Boot" = "Percent_CJS_Boot",
+         "Conditional Otis Test Boot" = "Conditional Test Boot",
+         "Full Otis Test Boot" = "Full Test Boot",
+         "Modified Otis Test Boot"="Modified Test Boot")
+```
+
+
+
+
+```{r}
+dfPowerCombinedBoot%>%
+  pivot_longer(cols= c("Conditional Otis Test Boot","Modified Otis Test Boot","Full Otis Test Boot","LRT Boot"), names_to = "ModelType", values_to ="Percentages")%>%
+  filter(N == 20 & maxMinute == 10 & !is.na(Type) & Type == "Power")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  facet_wrap(~ModelType)+
+  scale_color_discrete(name = "Alpha")+
+  theme_bw()+
+  labs(title = "Power Across Scenarios", subtitle = "N = 20; 10 capture occasions",y="Power",x="Per minute detection probability")
+```
+
+
+
+# Overall Comparison 
+
+```{r}
+dfOverallPower = left_join(dfPowerCombined, dfPowerCombinedBoot[,c("combinationNumber","Conditional Otis Test Boot","LRT Boot","Full Otis Test Boot","Modified Otis Test Boot","Type")], by = c("combinationNumber","Type"))
+```
+
+```{r}
+head(dfOverallPower)
+```
+
+
+
+
+```{r}
+dfOverallPower%>%
+   filter(N == 20 & maxMinute == 10 & !is.na(Type) & Type == "Power")%>%
+  pivot_longer(cols= c("Full Otis Test Boot","Full Otis Test"), names_to = "ModelType", values_to ="Percentages")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  facet_wrap(~ModelType)+
+  scale_color_discrete(name = "Alpha")+
+  theme_bw()+
+  labs(title = "Power Across Scenarios", subtitle = "N = 20; 10 capture occasions",y="Power",x="Per minute detection probability")
+
+dfOverallPower%>%
+   filter(N == 20 & maxMinute == 5 & !is.na(Type) & Type == "Power")%>%
+  pivot_longer(cols= c("Full Otis Test Boot","Full Otis Test"), names_to = "ModelType", values_to ="Percentages")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  facet_wrap(~ModelType)+
+  scale_color_discrete(name = "Alpha")+
+  theme_bw()+
+  labs(title = "Power Across Scenarios", subtitle = "N = 20; 5 capture occasions",y="Power",x="Per minute detection probability")
+```
+
+
+
+```{r}
+dfOverallPower%>%
+   filter(N == 20 & maxMinute == 10 & !is.na(Type) & Type == "Power")%>%
+  pivot_longer(cols= c("Modified Otis Test Boot","Modified Otis Test"), names_to = "ModelType", values_to ="Percentages")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  facet_wrap(~ModelType)+
+  scale_color_discrete(name = "Alpha")+
+  theme_bw()+
+  labs(title = "Power Across Scenarios", subtitle = "N = 20; 10 capture occasions",y="Power",x="Per minute detection probability")
+
+dfOverallPower%>%
+   filter(N == 20 & maxMinute == 5 & !is.na(Type) & Type == "Power")%>%
+  pivot_longer(cols= c("Modified Otis Test Boot","Modified Otis Test"), names_to = "ModelType", values_to ="Percentages")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  facet_wrap(~ModelType)+
+  scale_color_discrete(name = "Alpha")+
+  theme_bw()+
+  labs(title = "Power Across Scenarios", subtitle = "N = 20; 5 capture occasions",y="Power",x="Per minute detection probability")
+```
+
+No power when alpha -- 0.05 or 0.1. When alpha is 0.3 there is also no power... that is weird
+```{r}
+dfOtisTest_Rate_Overall_v2Org%>%
+  filter(N==20 & p_1m == 0.1 & maxMinute == 5 )%>%
+  group_by(alpha,TypeModified)%>%
+  summarise(n())
+```
+
+
+
+```{r}
+dfOverallPower%>%
+   filter(N == 20 & maxMinute == 10 & !is.na(Type) & Type == "Power")%>%
+  pivot_longer(cols= c("LRT Boot","LRT"), names_to = "ModelType", values_to ="Percentages")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  facet_wrap(~ModelType)+
+  scale_color_discrete(name = "Alpha")+
+  theme_bw()+
+  labs(title = "Power Across Scenarios", subtitle = "N = 20; 10 capture occasions",y="Power",x="Per minute detection probability")
+
+dfOverallPower%>%
+   filter(N == 20 & maxMinute == 5 & !is.na(Type) & Type == "Power")%>%
+  pivot_longer(cols= c("LRT Boot","LRT"), names_to = "ModelType", values_to ="Percentages")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  facet_wrap(~ModelType)+
+  scale_color_discrete(name = "Alpha")+
+  theme_bw()+
+  labs(title = "Power Across Scenarios", subtitle = "N = 20; 5 capture occasions",y="Power",x="Per minute detection probability")
+```
+
+
+
+
+When capture occasions is small, LRT boot works the best when we have high capture probability & high alpha. When p_1m is low, lrt boot seems to give a lil power - but nothing great. 
+```{r}
+dfOverallPower%>%
+   filter(N == 20 & maxMinute == 10 & !is.na(Type) & Type == "Power")%>%
+  pivot_longer(cols= c("LRT Boot","LRT","Modified Otis Test Boot","Modified Otis Test","Full Otis Test Boot","Full Otis Test"), names_to = "ModelType", values_to ="Percentages")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  facet_wrap(~ModelType)+
+  scale_color_discrete(name = "Alpha")+
+  theme_bw()+
+  labs(title = "Power Across Scenarios", subtitle = "N = 20; 10 capture occasions",y="Power",x="Per minute detection probability")
+
+dfOverallPower%>%
+   filter(N == 20 & maxMinute == 5 & !is.na(Type) & Type == "Power")%>%
+  pivot_longer(cols= c("LRT Boot","LRT","Modified Otis Test Boot","Modified Otis Test","Full Otis Test Boot","Full Otis Test"), names_to = "ModelType", values_to ="Percentages")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  facet_wrap(~ModelType,ncol=2)+ # facet grid 4x2
+  scale_color_discrete(name = "Alpha")+
+  theme_bw()+
+  labs(title = "Power Across Scenarios", subtitle = "N = 20; 5 capture occasions",y="Power",x="Per minute detection probability")
+```
+
+
+
 
 
