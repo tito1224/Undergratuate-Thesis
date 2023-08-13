@@ -339,9 +339,6 @@ dfOtisTest_Power = dfOtisTest_Power%>%
 
 
 
-Makes sense to do it by combination number I believe. Graph verifies that not a single case was rejected for combination number 1.
-ASK ABT THIS PART
-
 
 ```{r}
 dfOtisPercent = dfOtisTest_Power%>%
@@ -477,7 +474,6 @@ dfOtisTest_Rate_Overall = dfOtisTest_Power%>%
   ungroup()%>%
   mutate(Percent_Overall=round(nType/totalCases*100,2))
 dfOtisTest_Rate_Overall = left_join(dfOtisTest_Rate_Overall, dfOtisPercent,by="combinationNumber")
-dfOtisTest_Rate_Overall
 ```
 
 
@@ -541,15 +537,6 @@ if t = 5, the probability of seeing at least one significant result due to chanc
 But this is assuming we always have t-2 tests -> and in the actual data we have less than t-2 tests... 
 
 
-```{r}
-head(dfOtisTest_Power)
-
-dfOtisTest_Power%>%
-  distinct(id,counts,.keep_all = TRUE)%>%
-  group_by(id)%>%
-  mutate(nTests = n(),
-         bOverallReject = if_else(any(p_k_Otis < 0.05/n()),"Reject","Fail to Reject"))
-```
 
 
 ```{r}
@@ -559,7 +546,8 @@ dfOtisTest_Rate_Overall_v2Org = dfOtisTest_Power%>%
   unique() %>%
   group_by(id, N,p_1m,alpha,maxMinute,combinationNumber)%>%
   filter(!is.na(p_k_Otis))%>%
-  summarize(bOverallReject = if_else(any(p_k_Otis < 0.05/n()),"Reject","Fail to Reject"))
+  summarize(bOverallReject = if_else(any(p_k_Otis < 0.05/(maxMinute-2)),"Reject","Fail to Reject"))
+  #summarize(bOverallReject = if_else(any(p_k_Otis < 0.05/n()),"Reject","Fail to Reject"))
 
 # dfOtisTest_Rate_Overall_v2Org = dfOtisTest_Power%>%
 #   ungroup()%>%
@@ -579,6 +567,26 @@ dfOtisTest_Rate_Overall_v2Org = dfOtisTest_Rate_Overall_v2Org%>%
   )
          )
 ```
+
+Only 3 cases where each individual is detected each time in the simulation 
+```{r}
+dfOtisTest_Power%>%
+  ungroup()%>%
+  filter(is.na(pOverall_Otis))
+```
+
+```{r}
+dfOtisTest_Power%>%
+  filter(!is.na(p_k_Otis))%>%
+  distinct(id,.keep_all = TRUE)%>%
+  group_by(N,p_1m,alpha,maxMinute,combinationNumber)%>%
+  summarise(percentDatasets= round(n()/1000,5)*100 )%>%
+  arrange(percentDatasets,N,p_1m,alpha,maxMinute)%>%
+  select(combinationNumber,N,p_1m,alpha,maxMinute,percentDatasets)
+ 
+```
+
+
 
 ```{r}
 dfOtisTest_Rate_Overall_v2 = dfOtisTest_Rate_Overall_v2Org%>%
@@ -1128,6 +1136,7 @@ dfOtisPercent %>%
 
 
 
+
 Very strong power... let's see what happens when capture occasions fall
 ```{r}
 cutoff = data.frame( x = c(-Inf, Inf), y = 5, cutoff = factor(5) )
@@ -1161,10 +1170,10 @@ dfCJS_Power_Rate%>%
   labs(title = "Error Rates Across Scenarios", subtitle = "N = 20; 5 capture occasions")
 ```
 
-
-
+all comfortably within 5%
 ```{r}
-dfCJS_Power
+dfCJS_Power_Rate%>%
+  filter(!is.na(Type) & Type == "Type 1")
 ```
 
 
@@ -1289,6 +1298,7 @@ dfOtisTest_Rate_Boot
 ```
 
 
+
 ```{r}
 dfOtisTest_Rate_Boot%>%
   filter(N == 20 & maxMinute == 10 & !is.na(Type_k) & Type_k == "Power")%>%
@@ -1355,6 +1365,14 @@ dfOtisTest_Rate_Overall_Boot = left_join(dfOtisTest_Rate_Overall_Boot, dfOtisPer
 dfOtisTest_Rate_Overall_Boot
 ```
 
+
+
+```{r}
+0.05/(10-2)
+dfOtisTest_Rate_Overall_Boot%>%
+  filter(N == 20 & maxMinute == 10 & !is.na(Type) & Type == "Type 1")
+```
+
 ```{r}
 dfOtisTest_Rate_Overall_Boot%>%
   filter(N == 20 & maxMinute == 10 & !is.na(Type) & Type == "Power")%>%
@@ -1392,14 +1410,16 @@ dfOtisTest_Rate_Overall_Boot%>%
 
 
 
+
+Use new significance level!!!!
 ```{r}
 dfOtisTest_Rate_Overall_Boot_v2Org = dfOtisTest_Power_Boot%>%
   ungroup()%>%
-  select(id, N,p_1m,alpha,maxMinute,combinationNumber, counts, p_k_Otis) %>%
+  select(id, N,p_1m,alpha,maxMinute,combinationNumber, counts, p_k_Otis,CV_Conditional_Otis) %>%
   unique() %>%
   group_by(id, N,p_1m,alpha,maxMinute,combinationNumber)%>%
   filter(!is.na(p_k_Otis))%>%
-  summarize(bOverallReject = if_else(any(p_k_Otis < 0.05/n()),"Reject","Fail to Reject"))
+  summarize(bOverallReject = if_else(any(p_k_Otis < CV_Conditional_Otis/(maxMinute-2) ),"Reject","Fail to Reject"))
 
 
 dfOtisTest_Rate_Overall_Boot_v2Org = dfOtisTest_Rate_Overall_Boot_v2Org%>%
@@ -1569,6 +1589,9 @@ dfOverallPower = left_join(dfPowerCombined, dfPowerCombinedBoot[,c("combinationN
 
 ```{r}
 head(dfOverallPower)
+dfOverallPower = dfOverallPower%>%
+  rename("Overall Otis Test Boot" = "Full Otis Test Boot",
+         "Overall Otis Test" = "Full Otis Test")
 ```
 
 
@@ -1577,7 +1600,7 @@ head(dfOverallPower)
 ```{r}
 dfOverallPower%>%
    filter(N == 20 & maxMinute == 10 & !is.na(Type) & Type == "Power")%>%
-  pivot_longer(cols= c("Full Otis Test Boot","Full Otis Test"), names_to = "ModelType", values_to ="Percentages")%>%
+  pivot_longer(cols= c("Overall Otis Test Boot","Overall Otis Test"), names_to = "ModelType", values_to ="Percentages")%>%
   ggplot()+
   geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
   geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
@@ -1588,7 +1611,7 @@ dfOverallPower%>%
 
 dfOverallPower%>%
    filter(N == 20 & maxMinute == 5 & !is.na(Type) & Type == "Power")%>%
-  pivot_longer(cols= c("Full Otis Test Boot","Full Otis Test"), names_to = "ModelType", values_to ="Percentages")%>%
+  pivot_longer(cols= c("Overall Otis Test Boot","Overall Otis Test"), names_to = "ModelType", values_to ="Percentages")%>%
   ggplot()+
   geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
   geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
@@ -1665,7 +1688,7 @@ When capture occasions is small, LRT boot works the best when we have high captu
 ```{r}
 dfOverallPower%>%
    filter(N == 20 & maxMinute == 10 & !is.na(Type) & Type == "Power")%>%
-  pivot_longer(cols= c("LRT Boot","LRT","Modified Otis Test Boot","Modified Otis Test","Full Otis Test Boot","Full Otis Test"), names_to = "ModelType", values_to ="Percentages")%>%
+  pivot_longer(cols= c("LRT Boot","LRT","Modified Otis Test Boot","Modified Otis Test","Overall Otis Test Boot","Overall Otis Test"), names_to = "ModelType", values_to ="Percentages")%>%
   ggplot()+
   geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
   geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
@@ -1676,17 +1699,112 @@ dfOverallPower%>%
 
 dfOverallPower%>%
    filter(N == 20 & maxMinute == 5 & !is.na(Type) & Type == "Power")%>%
-  pivot_longer(cols= c("LRT Boot","LRT","Modified Otis Test Boot","Modified Otis Test","Full Otis Test Boot","Full Otis Test"), names_to = "ModelType", values_to ="Percentages")%>%
+  pivot_longer(cols= c("LRT Boot","LRT","Modified Otis Test Boot","Modified Otis Test","Overall Otis Test Boot","Overall Otis Test"), names_to = "ModelType", values_to ="Percentages")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  facet_wrap(~ModelType)+ # facet grid 4x2
+  scale_color_discrete(name = "Alpha")+
+  theme_bw()+
+  labs(title = "Power Across Scenarios", subtitle = "N = 20; 5 capture occasions",y="Power",x="Per minute detection probability")
+```
+
+## Cases where LRT rejects and Otis Does Not (vice versa)
+
+
+```{r}
+dfComparePowerGraph = left_join(dfCJS_Power, rename(dfOtisTest_Power[,c("id","Type","pOverall_Otis")], "TypeOtis"="Type"),by=c("id"))
+```
+
+```{r}
+dfComparePowerGraph%>%
+  select(id,p_CJS, pOverall_Otis, Type, TypeOtis)%>%
+  filter(Type != TypeOtis)
+```
+
+```{r}
+dfOverallPower%>%
+   filter(N == 20 & maxMinute == 5 & Type == "Type 1")%>%
+  pivot_longer(cols= c("LRT Boot","LRT","Modified Otis Test Boot","Modified Otis Test","Overall Otis Test Boot","Overall Otis Test"), names_to = "ModelType", values_to ="Percentages")%>%
   ggplot()+
   geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
   geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
   facet_wrap(~ModelType,ncol=2)+ # facet grid 4x2
   scale_color_discrete(name = "Alpha")+
   theme_bw()+
-  labs(title = "Power Across Scenarios", subtitle = "N = 20; 5 capture occasions",y="Power",x="Per minute detection probability")
+  labs(title = "Type 1 Rates Across Scenarios", subtitle = "N = 20; 5 capture occasions",y="Power",x="Per minute detection probability")
+
+
+dfOverallPower%>%
+   filter(N == 20 & maxMinute == 10 & Type == "Type 1")%>%
+  pivot_longer(cols= c("LRT Boot","LRT","Modified Otis Test Boot","Modified Otis Test","Overall Otis Test Boot","Overall Otis Test"), names_to = "ModelType", values_to ="Percentages")%>%
+  ggplot()+
+  geom_point(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  geom_line(aes(x=p_1m, y = Percentages, color = as.factor(alpha)))+
+  facet_wrap(~ModelType,ncol=2)+ # facet grid 4x2
+  scale_color_discrete(name = "Alpha")+
+  theme_bw()+
+  labs(title = "Type 1 Rates Across Scenarios", subtitle = "N = 20; 10 capture occasions",y="Power",x="Per minute detection probability")
 ```
 
 
 
+```{r}
+dfOtisTest_Rate_Overall_v2Org%>%
+  filter(N == 20 & maxMinute == 10 & p_1m == 0.4 & TypeModified == "Type 1")
+
+
+dfOtisTest_Power%>%
+  filter(combinationNumber==58 & alpha == 0 & id == "58_108")
+
+
+dfOtisTest_Power%>%
+  group_by(combinationNumber,N,p_1m,alpha,maxMinute,counts)%>%
+  summarise(avgfk = mean(fk))%>%
+  filter(combinationNumber == 58)%>%
+  arrange(avgfk)
+```
+
+
+```{r}
+dfComparePowerGraph%>%
+  distinct(id,.keep_all = TRUE)%>%
+  filter(N == 20 & maxMinute == 10 & !duplicated(id) )%>%
+  rename("LRT" = "p_CJS",
+         "Overall Otis" = "pOverall_Otis")%>%
+  pivot_longer(cols= c("LRT","Overall Otis"), names_to = "ModelType", values_to ="pGraph")%>%
+ggplot()+ 
+  geom_boxplot(aes(x= as.factor(p_1m), y = pGraph, color = as.factor(alpha)),coef=100)+ 
+   geom_hline(aes(yintercept=0.05), color = "grey30")+
+  scale_color_discrete(name="Alpha")+
+  facet_wrap(~ModelType)+
+  theme_bw()+
+  labs(title = "Distribution of LRT and Overall Otis Test P Values", subtitle = "N = 20; 10 capture occassions.", x = "Per minute detection probability", y = "p")
+```
+
+Phi estimate is on the parameter space!
+```{r}
+dfClosure_CJS%>%
+  filter(N == 20 & p_1m == 0.3 & alpha == 0.2 & p_CJS== 1)%>%
+  select(id,CJS_estimate, p_CJS,npar,paramSimple)
+```
+
+param on boundary space occurs most often when N is small, and alpha = 0 -> makes sense that phi estimate is close to 1. Occurs 31% of the time...
+```{r}
+dfClosure_CJS%>%
+  distinct(id,.keep_all = TRUE)%>%
+  filter(pExactOne == 1)%>%
+  group_by(combinationNumber,N,p_1m,alpha,maxMinute)%>%
+  summarise(n= n())%>%
+  arrange(desc(n))
+
+
+dfClosure_CJS%>%
+  distinct(id,.keep_all = TRUE)%>%
+  filter(pExactOne == 1)%>%
+  group_by(combinationNumber,N,p_1m,alpha,maxMinute)%>%
+  summarise(n= n())%>%
+  sum()/100000*100
+```
 
 
